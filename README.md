@@ -14,6 +14,8 @@
 > Excel, Word) into standardised, audit-ready JSON records — with bill matching, field-level
 > incremental updates, AR/AP determination, duplicate/conflict detection and a deterministic-first
 > harness that keeps the LLM honest.
+>
+> 📄 笔试题原文的完整转录与仓库约定见 **[AGENT.md](AGENT.md)**。
 
 ---
 
@@ -208,6 +210,7 @@ python harness/run_eval.py --llm                                             # �
 
 ```
 sailbill-agent/
+├─ AGENT.md                     # 题面原文完整转录 + 仓库约定
 ├─ src/sailbill/
 │  ├─ ingest/      eml.py excel.py word.py pdf.py ocr.py router.py
 │  ├─ extract/     rules.py tables.py llm.py prompts.py grounding.py from_ocr.py lexicon.py
