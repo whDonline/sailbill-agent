@@ -1,0 +1,20 @@
+{
+  "name": "credit_note_docx",
+  "description": "Word 贷项通知：表格费用行，签发方为角色型公司名（不得被别名吞掉）",
+  "files": ["samples/credit_note.docx"],
+  "store": "samples/existing_bills.json",
+  "expect": {
+    "document": {
+      "document_type": "Credit Note",
+      "reference_no": "CN-202609-003",
+      "document_date": "2026-09-22",
+      "issuer": "Destination Agent Pte Ltd",
+      "recipient": "XYZ Freight Forwarding Ltd"
+    },
+    "charges": [
+      {"charge_item": "Handling Charge", "amount": 40.0, "currency": "USD", "operation": "CREATE", "posting_type": "AP"},
+      {"charge_item": "Storage Charge", "amount": 75.0, "currency": "USD", "operation": "CREATE", "posting_type": "AP"},
+      {"charge_item": "Customs Clearance Fee", "amount": 60.0, "currency": "USD", "operation": "CREATE", "posting_type": "AP"}
+    ]
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "name": "pending_debit_note_pdf",
+  "description": "脏单据：未知费用名 + 合计与明细不符 + 缺单据编号 -> 必须全部 PENDING_REVIEW，且不得虚构单据编号",
+  "files": ["samples/pending_debit_note.pdf"],
+  "store": "samples/existing_bills.json",
+  "expect": {
+    "document": {
+      "document_type": "Debit Note",
+      "reference_no": null,
+      "document_date": "2026-09-26",
+      "issuer": "ABC Logistics (Shanghai) Co., Ltd",
+      "recipient": "XYZ Freight Forwarding Ltd"
+    },
+    "charges": [
+      {"charge_item": "Special Project Surcharge XYZ", "amount": 120.0, "currency": "USD", "operation": "PENDING_REVIEW", "posting_type": "AP"},
+      {"charge_item": "Terminal Handling Charge", "amount": 180.0, "currency": "USD", "operation": "PENDING_REVIEW", "posting_type": "AP"}
+    ]
+  }
+}

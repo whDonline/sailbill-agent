@@ -1,0 +1,38 @@
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+
+# env / secrets
+.env
+.env.local
+
+# runtime artifacts
+.tmp/
+.cache/
+out/
+*.log
+
+# private customer data must never be committed
+samples/private/
+data/private/
+tests/fixtures/private/
+TestSamples/
+
+# build artefacts left behind by pip/pytest inside the workspace
+pip-build-tracker-*/
+pip-install-*/
+pip-unpack-*/
+pip-ephem-wheel-cache-*/
+pytest-cache-files-*/
+.pytest_cache/
+
+# generated reports
+eval/report.md
+
+# os
+.DS_Store
+Thumbs.db

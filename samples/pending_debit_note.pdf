@@ -1,0 +1,49 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<< /Length 802 >>
+stream
+BT
+/F1 10 Tf
+1 0 0 1 50 782 Tm (ABC LOGISTICS \(SHANGHAI\) CO., LTD) Tj
+1 0 0 1 50 766 Tm () Tj
+1 0 0 1 50 750 Tm (DEBIT NOTE) Tj
+1 0 0 1 50 734 Tm () Tj
+1 0 0 1 50 718 Tm (Date: 2026-09-26) Tj
+1 0 0 1 50 702 Tm (B/L No.: COSU7777000123) Tj
+1 0 0 1 50 686 Tm () Tj
+1 0 0 1 50 670 Tm (Issued By: ABC Logistics \(Shanghai\) Co., Ltd) Tj
+1 0 0 1 50 654 Tm (Bill To: XYZ Freight Forwarding Ltd) Tj
+1 0 0 1 50 638 Tm () Tj
+1 0 0 1 50 622 Tm (Charge Description                  Qty    Unit Price      Amount   Currency  PP/CC) Tj
+1 0 0 1 50 606 Tm (Special Project Surcharge XYZ       1        120.00        120.00  USO       PP) Tj
+1 0 0 1 50 590 Tm (Terminal Handling Charge            1        180.00        180.00  USD       CC) Tj
+1 0 0 1 50 574 Tm () Tj
+1 0 0 1 50 558 Tm (Total Due: 420.00 USD) Tj
+ET
+endstream
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000241 00000 n 
+0000000338 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+1191
+%%EOF

@@ -1,0 +1,22 @@
+{
+  "name": "debit_note_pdf",
+  "description": "文本层 PDF 借项通知：两条命中已有账单、一条金额变更、两条新增",
+  "files": ["samples/debit_note.pdf"],
+  "store": "samples/existing_bills.json",
+  "expect": {
+    "document": {
+      "document_type": "Debit Note",
+      "reference_no": "DN-202609-001",
+      "document_date": "2026-09-20",
+      "issuer": "ABC Logistics (Shanghai) Co., Ltd",
+      "recipient": "XYZ Freight Forwarding Ltd"
+    },
+    "charges": [
+      {"charge_item": "Ocean Freight", "amount": 2750.0, "currency": "USD", "payment_term": "PP", "operation": "NO_CHANGE", "posting_type": "AP"},
+      {"charge_item": "Terminal Handling Charge", "amount": 300.0, "currency": "USD", "payment_term": "CC", "operation": "UPDATE", "posting_type": "AP"},
+      {"charge_item": "Documentation Fee", "amount": 50.0, "currency": "USD", "payment_term": "PP", "operation": "NO_CHANGE", "posting_type": "AP"},
+      {"charge_item": "Customs Clearance Fee", "amount": 80.0, "currency": "USD", "payment_term": "PP", "operation": "CREATE", "posting_type": "AP"},
+      {"charge_item": "Handling Charge", "amount": 40.0, "currency": "USD", "payment_term": "PP", "operation": "CREATE", "posting_type": "AP"}
+    ]
+  }
+}

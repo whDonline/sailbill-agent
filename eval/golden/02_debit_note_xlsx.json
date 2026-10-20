@@ -1,0 +1,21 @@
+{
+  "name": "debit_note_xlsx",
+  "description": "Excel 借项通知：标题行 + 表头 + 合计块",
+  "files": ["samples/debit_note.xlsx"],
+  "store": "samples/existing_bills.json",
+  "expect": {
+    "document": {
+      "document_type": "Debit Note",
+      "reference_no": "DN-202609-002",
+      "document_date": "2026-09-21",
+      "issuer": "ABC Logistics (Shanghai) Co., Ltd",
+      "recipient": "XYZ Freight Forwarding Ltd"
+    },
+    "charges": [
+      {"charge_item": "Ocean Freight", "amount": 3100.0, "currency": "USD", "payment_term": "PP", "operation": "NO_CHANGE", "posting_type": "AP"},
+      {"charge_item": "Terminal Handling Charge", "amount": 320.0, "currency": "USD", "payment_term": "CC", "operation": "CREATE", "posting_type": "AP"},
+      {"charge_item": "Documentation Fee", "amount": 55.0, "currency": "USD", "payment_term": "PP", "operation": "NO_CHANGE", "posting_type": "AP"},
+      {"charge_item": "Trucking Charge", "amount": 420.0, "currency": "USD", "payment_term": "PP", "operation": "CREATE", "posting_type": "AP"}
+    ]
+  }
+}
