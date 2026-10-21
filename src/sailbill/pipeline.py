@@ -194,7 +194,7 @@ def _process_unit(
     extraction = extract_document(docs, settings=settings, resolver=resolver, use_llm=use_llm)
     issues = validate_extraction(extraction, settings=settings)
 
-    entity = accounting_entity or _infer_entity(extraction, store, resolver)
+    entity = accounting_entity or settings.accounting_entity or _infer_entity(extraction, store, resolver)
     posting = determine_posting(extraction, accounting_entity=entity, resolver=resolver)
 
     outcome = UnitOutcome(

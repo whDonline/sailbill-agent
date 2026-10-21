@@ -64,6 +64,9 @@ class Settings:
     review_threshold: float = 0.60
     amount_tolerance: float = 0.01
 
+    # the entity the books are kept for; AR/AP cannot be decided without it
+    accounting_entity: str = ""
+
     # infrastructure
     cache_dir: Path = Path(".cache/sailbill")
     max_attachment_depth: int = 3
@@ -98,6 +101,7 @@ class Settings:
             upload_endpoint=_env("SAILBILL_UPLOAD_ENDPOINT"),
             review_threshold=_float("SAILBILL_CONFIDENCE_REVIEW", 0.60),
             amount_tolerance=_float("SAILBILL_AMOUNT_TOLERANCE", 0.01),
+            accounting_entity=_env("SAILBILL_ACCOUNTING_ENTITY"),
             cache_dir=Path(_env("SAILBILL_CACHE_DIR") or ".cache/sailbill"),
             max_attachment_depth=int(_float("SAILBILL_MAX_ATTACHMENT_DEPTH", 3)),
             max_text_chars=int(_float("SAILBILL_MAX_TEXT_CHARS", 120_000)),

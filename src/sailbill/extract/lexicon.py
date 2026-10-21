@@ -13,6 +13,7 @@ DOC_TYPE_PATTERNS: dict[str, list[str]] = {
     "Debit Note": ["debit note", "debit memo", "debit advice", "dn", "借项通知", "借记通知", "借方通知"],
     "Credit Note": ["credit note", "credit memo", "credit advice", "cn", "贷项通知", "贷记通知", "贷方通知"],
     "Invoice": ["commercial invoice", "proforma invoice", "tax invoice", "invoice", "发票", "账单", "费用清单"],
+    "Arrival Notice": ["arrival notice", "cargo arrival notice", "到货通知", "到港通知"],
     "Statement of Account": ["statement of account", "statement", "soa", "对账单", "结算单"],
     "Bill of Lading": ["bill of lading", "b/l", "提单"],
 }
@@ -45,7 +46,7 @@ PARTY_LABELS: dict[str, list[str]] = {
     ],
     "recipient": [
         "bill to", "billed to", "sold to", "invoice to", "customer", "consignee", "buyer",
-        "payer", "account of", "付款方", "接收方", "客户",
+        "payer", "付款方", "接收方", "客户",
     ],
 }
 

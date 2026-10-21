@@ -24,7 +24,10 @@ from .tables import table_to_charges
 
 _CJK = "\u4e00-\u9fff"
 _NUM_TOKEN = re.compile(r"[-−(]?\d[\d,\s]*\.?\d*\)?")
-_LABEL_SEP = r"\s*(?:no\.?|no|number|#|:|-|：)?\s*"
+# note: [ \t] -- never \s.  A separator that can eat a newline lets an empty
+# label ("CONSIGNEE", a table header with no value) capture the *next* line as
+# its value, which silently invents a counterparty.
+_LABEL_SEP = r"[ \t]*(?:no\.?|number|#|:|-|：)?[ \t]*"
 
 
 # --------------------------------------------------------------------------- #
@@ -119,7 +122,14 @@ def detect_doc_type(text: str) -> tuple[Optional[str], Optional[str]]:
     for region in (head, text):
         low = region.lower()
         # Credit Note before Debit Note: "CREDIT NOTE" titles often mention DN too
-        order = ("Credit Note", "Debit Note", "Statement of Account", "Invoice", "Bill of Lading")
+        order = (
+            "Credit Note",
+            "Debit Note",
+            "Arrival Notice",
+            "Statement of Account",
+            "Invoice",
+            "Bill of Lading",
+        )
         for doc_type in order:
             for pattern in lexicon.DOC_TYPE_PATTERNS[doc_type]:
                 if pattern in {"dn", "cn", "soa", "b/l"}:
@@ -233,7 +243,32 @@ _LINE_NUMBER = re.compile(r"^\s*\d{1,3}\s+(?=[A-Za-z])")
 
 # a line only counts as a fee row if its name looks like a fee; otherwise free
 # text ("Remark: 3 copies") would be booked as charges
-_FEE_WORD = re.compile(r"(fee|charge|surcharge|cost|rate|detention|demurrage|freight|费|金)", re.IGNORECASE)
+_FEE_WORD = re.compile(
+    r"(fee|charge|surcharge|cost|rate|detention|demurrage|freight|carriage|haulage|handling"
+    r"|terminal|wharfage|inland|pickup|delivery|service|admin|toll|费|金)",
+    re.IGNORECASE,
+)
+
+# currency codes used to split "<description> USD 245.00" style lines
+_CCY_INLINE = re.compile(
+    r"\b(USD|CNY|RMB|EUR|HKD|GBP|JPY|SGD|AUD|CAD|THB|MYR|TWD|KRW|VND|AED|CHF|NZD)\b", re.IGNORECASE
+)
+
+
+def _split_by_currency(line: str) -> tuple[Optional[str], Optional[str], Optional[str]]:
+    """``On Carriage Additional - US EmOCA17 USD  245.0000`` -> (name, rest, USD).
+
+    Splitting on the last currency token is far more reliable than splitting on
+    whitespace: it keeps reference codes out of the fee name.
+    """
+    matches = list(_CCY_INLINE.finditer(line))
+    if not matches:
+        return None, None, None
+    last = matches[-1]
+    rest = line[last.end():]
+    if amount_in_line(rest) is None:
+        return None, None, None
+    return line[: last.start()].strip(" -—|:."), rest, last.group(1).upper()
 
 
 def charges_from_text(text: str, *, doc_currency: Optional[str]) -> list[ChargeExtraction]:
@@ -275,24 +310,29 @@ def charges_from_text(text: str, *, doc_currency: Optional[str]) -> list[ChargeE
                     )
                     continue
 
-        # --- shape 2: <name>   <amount> -----------------------------------
-        m = _TEXT_CHARGE.match(line)
-        if not m:
-            continue
-        name = m.group("name").strip(" .:：-")
-        if len(name) < 3:
+        # --- shape 2: <name> [CUR]   <amount> -----------------------------
+        name_part, rest, inline_currency = _split_by_currency(line)
+        if name_part is None:
+            m = _TEXT_CHARGE.match(line)
+            if not m:
+                continue
+            name_part = m.group("name")
+            rest = m.group("rest")
+            inline_currency = None
+
+        name = name_part.strip(" .:：-")
+        if len(name) < 3 or len(name) > 60 or len(name.split()) > 8:
             continue
         std = standardize_charge(name)
-        rest = m.group("rest")
+        amount = amount_in_line(rest)
+        if amount is None:
+            continue
         looks_like_fee = (
             std.method != "unmapped"
             or bool(_FEE_WORD.search(name))
-            or bool(re.search(r"\b[A-Z]{3}\b", rest))
+            or inline_currency is not None
         )
         if not looks_like_fee:
-            continue
-        amount = amount_in_line(rest)
-        if amount is None:
             continue
         parsed = parse_amount(rest)
         term_match = re.search(r"\b(PP|CC|P/P|PREPAID|COLLECT)\b", line, re.IGNORECASE)
@@ -302,7 +342,7 @@ def charges_from_text(text: str, *, doc_currency: Optional[str]) -> list[ChargeE
                 charge_item_raw=name,
                 charge_item=std.standard,
                 amount=round2(amount),
-                currency=(parsed.currency_hint if parsed else None) or doc_currency,
+                currency=inline_currency or (parsed.currency_hint if parsed else None) or doc_currency,
                 payment_term=term,
                 evidence=raw_line,
             )
@@ -511,7 +551,7 @@ def _party_from_headers_or_labels(headers: dict, text: str, *, role: str) -> tup
     header_keys = ("from", "sender") if role == "issuer" else ("to", "recipient")
 
     value, evidence, _ = labeled_value(text, labels)
-    if value and not _bad_party(value):
+    if value and not _bad_party(value) and not _looks_like_table_header(evidence):
         return value, evidence
 
     for key in header_keys:
@@ -522,12 +562,45 @@ def _party_from_headers_or_labels(headers: dict, text: str, *, role: str) -> tup
 
 
 def _bad_party(value: str) -> bool:
-    text = (value or "").strip().lower()
-    if len(text) > 80 or len(text) < 2:
+    text = (value or "").strip()
+    low = text.lower()
+    if len(text) > 80 or len(text) < 3:
         return True
     if text.isdigit():
         return True
-    return any(text.startswith(bad) for bad in lexicon.BAD_PARTY_VALUES)
+    # placeholders and table artifacts, not names
+    if text.startswith("(") or text.startswith("["):
+        return True
+    # a company name is not a sentence: no leading article, no all-lowercase run
+    if re.match(r"^(the|a|an|this|that|our|your|its)\s", low):
+        return True
+    words = text.split()  # case matters here, so use the original text
+    if len(words) >= 3 and all(word.islower() for word in words):
+        return True
+    # a sentence fragment can carry a digit ("has signed 3 bills of lading")
+    if len(words) >= 3 and not re.search(r"[A-Z\u4e00-\u9fff]", text):
+        return True
+    if len(words) == 1 and text.islower() and not re.search(r"[\u4e00-\u9fff]", text):
+        return True  # a bare lowercase token ("pltplt") is a domain, not a party
+    return any(low.startswith(bad) for bad in lexicon.BAD_PARTY_VALUES)
+
+
+_HEADER_TOKENS = re.compile(
+    r"\b(SHIPPER|CONSIGNEE|NOTIFY|BILL\s+TO|SOLD\s+TO|DELIVERY\s+AGENT|FORWARDING\s+AGENT)\b",
+    re.IGNORECASE,
+)
+
+
+def _looks_like_table_header(evidence: Optional[str]) -> bool:
+    """Arrival notices put ``SHIPPER NOTIFY | CONSIGNEE`` in a header row.
+
+    Taking the cell after such a header yields company names that belong to a
+    different column ("FREE BUSINESS"), so two or more party labels on one line
+    mean "this is a table header, not a label/value pair".
+    """
+    if not evidence:
+        return False
+    return len(set(m.group(1).upper() for m in _HEADER_TOKENS.finditer(evidence))) >= 2
 
 
 def _display_name(raw: str) -> str:
@@ -546,8 +619,10 @@ def _display_name(raw: str) -> str:
     if display.strip():
         return display.strip()
     if addr:
-        domain = addr.split("@")[-1]
-        return domain.split(".")[0].replace("-", " ").strip()
+        # no display name: keep the address itself.  Deriving a company name
+        # from the domain root invented identities ("pltplt"); the raw address
+        # is at least traceable.
+        return addr.strip()
     return text
 
 

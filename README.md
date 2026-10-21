@@ -162,6 +162,9 @@ SAILBILL_LLM_MODEL=deepseek-chat
 SAILBILL_LLM_BASE_URL=https://api.deepseek.com/v1
 SAILBILL_LLM_API_KEY=sk-...
 
+# 记账主体：不配置则 AR/AP 无法判定，记录会转 PENDING_REVIEW（刻意如此，不默认 AP）
+SAILBILL_ACCOUNTING_ENTITY=
+
 # OCR 服务
 SAILBILL_OCR_ENDPOINT=http://36.103.199.11:5002
 SAILBILL_OCR_TASK=orderChange
@@ -186,6 +189,28 @@ SAILBILL_UPLOAD_ENDPOINT=            # 任意支持 multipart 上传并返回链
 
 OCR 响应按文件 `sha256` 缓存，重跑零成本；`SAILBILL_OCR_FOR_PDF=true` 可强制让有文本层的 PDF
 也走一遍 OCR，用于**双通道交叉校验**。
+
+## 真实样本回归（`TestSamples/`，不随仓库分发）
+
+拿到题面提供的真实单据后，逐份跑通并修掉了 6 个真实版式问题：
+
+| 真实文件 | 结果 |
+| --- | --- |
+| `PDF 示例账单2.pdf`（US 风格 Debit Note） | 3 条费用 `65.00 + 1310.40 + 35.00 = 1410.40`，与单据 `TOTAL AMOUNT` **分账闭合**；编号 `DC-108478`、日期、`NEPTUNE SHIPPING LIMITED → AEBO TCO IMPORT LLC` 全部正确；指定记账主体后 **CREATE ×3 / AP** |
+| `PDF示例账单1.pdf`（CMA CGM Arrival Notice） | 抽出 `On Carriage` `245.00 USD`，等于 `TOTAL CHARGES TO BE PAID`；但该单据交易方是**表格列头**（`SHIPPER NOTIFY / CONSIGNEE`），无法可信定位，故 AR/AP 不判定 → `PENDING_REVIEW` |
+| EML 的 `MBL.pdf` / `HBL.pdf` | 提单无费用 → `PENDING_REVIEW`（`DOC_TYPE_UNSUPPORTED`），不硬凑记录 |
+| `图片示例.png`、EML 的 `JPG` 附件 | 需 OCR；本地文件必须先变成**公网 URL**。本机网络下临时文件托管（file.io）TLS 不通，因此走 `PENDING_REVIEW` 并明确提示；生产应改为对象存储预签名 URL |
+
+真实数据暴露并修复的问题（每条都有回归测试）：
+
+1. `_LABEL_SEP` 里的 `\s*` 会吃掉换行，导致空标签（如列头 `CONSIGNEE`）把**下一行**当成自己的值 → 改为 `[ \t]*`；
+2. 标签 `to` 会命中 `TOTAL`，把单据总额行当成了接收方 → 标签后加 `(?![A-Za-z])` 边界；
+3. `ALL`、`COD`、`THE` 都是合法 ISO 4217 代码，普通过英文会被当成币种 → 币种必须有金额/币种词上下文并过滤停用词；
+4. `TOTAL 1,410.40 0` 用"行内最右数字"取到 `0` → 合计行改用标签后**第一个**数字；
+5. 空格对齐的 `rate qty P/C amount` 费用表（`P`=预付/`C`=到付）与 `On Carriage Additional ... USD 245.0000` 这类行原先完全抽不到 → 新增两种行形态解析；
+6. 交易方取值可能是句子（`the account of the cargo`）或表格残片（`FREE BUSINESS`）→ 增加"公司名 vs 句子"判别与列头行识别。
+
+> 以上验证可用 `pytest tests/test_real_samples.py` 复现（找不到 `TestSamples/` 时自动跳过）。
 
 ---
 

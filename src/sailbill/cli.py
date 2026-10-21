@@ -85,6 +85,17 @@ def cmd_run(args: argparse.Namespace) -> int:
         f"分布 {summary['by_operation']}，待复核 {summary['needs_review']} 条",
         file=sys.stderr,
     )
+    if (
+        summary["needs_review"]
+        and not args.entity
+        and not settings.accounting_entity
+        and not store.common_entity()
+    ):
+        print(
+            "[sailbill] 提示：未指定记账主体，AR/AP 无法判定，相关记录已转 PENDING_REVIEW。\n"
+            '          用 --entity "<你的公司全称>" 或设置 SAILBILL_ACCOUNTING_ENTITY 后可入账。',
+            file=sys.stderr,
+        )
 
     if args.trace:
         trace_path = Path(args.trace)

@@ -157,7 +157,7 @@ def validate_extraction(ext: DocExtraction, *, settings: Settings | None = None)
 
     # ---- document level --------------------------------------------------
     if ext.document_type.is_present and ext.document_type.value not in {
-        "Debit Note", "Credit Note", "Invoice", "Statement of Account",
+        "Debit Note", "Credit Note", "Invoice", "Statement of Account", "Arrival Notice",
     }:
         issues.append(
             Issue(code="DOC_TYPE_UNSUPPORTED", message=f"单据类型 {ext.document_type.value} 不是账单类单据",

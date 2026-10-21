@@ -42,6 +42,10 @@ STANDARD_CHARGES: dict[str, list[str]] = {
         "trucking charge", "trucking fee", "trucking", "truck fee", "truckage", "haulage",
         "inland trucking", "拖车费", "内陆运费", "内陆运输费", "卡车费", "拖车",
     ],
+    "On Carriage": [
+        "on carriage", "on-carriage", "oncarriage", "on carriage additional", "on carriage charge",
+        "oncarriage additional", "second leg freight", "二程运费", "内陆转运费", "转关运输费",
+    ],
     "Customs Clearance Fee": [
         "customs clearance fee", "customs fee", "customs clearance", "customs",
         "customs brokerage", "brokerage", "报关费", "清关费", "报关", "清關費",
@@ -115,7 +119,7 @@ class ChargeStandard:
 
     @property
     def needs_review(self) -> bool:
-        return self.method in {"fuzzy", "unmapped"}
+        return self.method in {"fuzzy", "unmapped", "prefix"}
 
 
 def _build_index(extra: dict[str, Iterable[str]] | None = None) -> dict[str, str]:
@@ -140,6 +144,7 @@ def standardize_charge(
     *,
     custom: dict[str, Iterable[str]] | None = None,
     fuzzy_threshold: float = 0.88,
+    allow_prefix: bool = True,
 ) -> ChargeStandard:
     """Map a raw fee name onto the canonical vocabulary."""
     text = str(raw or "").strip()
@@ -174,6 +179,21 @@ def standardize_charge(
         candidate = "".join(tokens)
         if candidate in index:
             return ChargeStandard(standard=index[candidate], raw=text, method="alias", score=0.95)
+
+    # longest known prefix: real documents append references and surcharge words,
+    # e.g. "On Carriage Additional - US EmOCA17 USD" is just "On Carriage"
+    if allow_prefix:
+        words = _fold(text).split()
+        for cut in range(len(words) - 1, 1, -1):
+            candidate = "".join(words[:cut])
+            if candidate in index:
+                return ChargeStandard(
+                    standard=index[candidate],
+                    raw=text,
+                    method="prefix",
+                    score=0.9,
+                    warnings=[f"费用名 {text!r} 含附加描述，按前缀映射为 {index[candidate]!r}"],
+                )
 
     if len(key) < 4:
         return ChargeStandard(

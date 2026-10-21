@@ -241,6 +241,34 @@ def make_eml() -> None:
     (SAMPLES / "booking_email.eml").write_bytes(bytes(msg))
 
 
+def make_scan_png() -> bool:
+    """A rasterised version of the same DN, for the OCR path.
+
+    Needs Pillow (``pip install -e ".[dev]"``); skipped silently when missing so
+    sample generation never blocks on an optional dependency.
+    """
+    try:
+        from PIL import Image, ImageDraw, ImageFont
+    except ImportError:
+        print("  (skip scan_debit_note.png：未安装 Pillow)")
+        return False
+
+    width, height = 1240, 1754
+    image = Image.new("RGB", (width, height), "white")
+    draw = ImageDraw.Draw(image)
+    try:
+        font = ImageFont.truetype("arial.ttf", 26)
+    except OSError:
+        font = ImageFont.load_default()
+    y = 90
+    for line in DN_LINES:
+        if line.strip():
+            draw.text((70, y), line, fill="black", font=font)
+        y += 38
+    image.save(SAMPLES / "scan_debit_note.png")
+    return True
+
+
 def make_existing_bills() -> None:
     bills = [
         {
@@ -280,12 +308,30 @@ def make_existing_bills() -> None:
     )
 
 
-def main() -> int:
+EXPECTED = [
+    "debit_note.pdf",
+    "ar_debit_note.pdf",
+    "pending_debit_note.pdf",
+    "debit_note.xlsx",
+    "credit_note.docx",
+    "scan_debit_note.png",
+    "existing_bills.json",
+    "booking_email.eml",
+]
+
+
+def main(force: bool = False) -> int:
     SAMPLES.mkdir(parents=True, exist_ok=True)
+    if not force and all((SAMPLES / name).exists() for name in EXPECTED):
+        print("samples/ 已完整存在，跳过生成（需要重新生成请加 --force）")
+        for name in EXPECTED:
+            print(f"  {name}")
+        return 0
     make_pdf()
     make_extra_pdfs()
     make_xlsx()
     make_docx()
+    make_scan_png()
     make_existing_bills()
     make_eml()  # last: it embeds the two files above
     for path in sorted(SAMPLES.iterdir()):
@@ -294,4 +340,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(force="--force" in sys.argv))

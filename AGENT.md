@@ -1,13 +1,5 @@
 # AGENT.md · 题目原文与仓库约定
 
-本文件保存**笔试题原文的完整转录**（含原始编号、代码块、表格与提交方式），作为本仓库的唯一需求来源；
-末尾附「题面 → 实现」对照与仓库约定，供后续维护者/AGENT 直接使用。
-
-- **题目来源**：<https://ks.wjx.com/vm/h46aF6R.aspx>（问卷星表单页，标题「AI agent 笔试题」）
-- **转录说明**：正文按页面顺序逐节保留；仅做 Markdown 排版整理，把页面上的转义反斜杠还原，
-  并把 JSON 代码块修正为合法 JSON。第七节编号在原文中即为 1–6、8、10（缺 7、9），此处保持原样。
-- **表单前置字段**：`您的姓名`、`简历投递渠道`（必填，与本仓库无关）。
-- **题面附图**：页面顶部有两张图片（`pubnew.paperol.cn/...jpg`、`.../png`），文本内容不含附件信息，未随转录保留。
 
 ---
 
@@ -17,9 +9,7 @@
 
 ## 一、项目背景
 
-航运及国际货代业务的费用信息通常分散在邮件、PDF 账单、扫描图片、Excel 费用表和 Word 文档中。
-财务人员需要人工识别 Debit Note、Credit Note、Invoice 等单据中的费用项目、金额、币种、付款方式和
-应收应付属性，再新增账单或更新已有账单。
+航运及国际货代业务的费用信息通常分散在邮件、PDF 账单、扫描图片、Excel 费用表和 Word 文档中。财务人员需要人工识别 Debit Note、Credit Note、Invoice 等单据中的费用项目、金额、币种、付款方式和应收应付属性，再新增账单或更新已有账单。
 
 本项目要求开发一个航运智能账单助手智能体，通过多格式文档解析、OCR 识别和大模型语义分析，
 自动提取费用信息，匹配已有账单，执行新增或增量更新，并输出可供财务系统使用的标准结构化数据。
@@ -54,7 +44,6 @@
 - DOC/DOCX Word 文件；
 - 已存在的账单 JSON，用于账单匹配和更新。
 
-链接: <https://pan.baidu.com/s/1ihoJqkhlJdrqec86Pf4_2Q> 提取码: `pltp`
 
 PDF 和图片通过以下 OCR API 识别：
 
@@ -236,11 +225,6 @@ ocr_result = response.json()
 9. 写出 5 点以上自己的思考，对上述要求进行补充，业务上，技术上都可；
 10. 需要基于 python 和 langchain 代码实现。
 
-打包为 zip 或提供 Git 仓库链接，发送至：`LUKA@PLTPLT.COM` 及 `pan@pltplt.com`
-
----
-
-<sub>问卷星提供技术支持 · 页面举报入口：<https://www.wjx.cn/vm/Q0mluca.aspx?q1=h46aF6R&q2=1></sub>
 
 ---
 
@@ -269,10 +253,22 @@ ocr_result = response.json()
 python -m venv .venv && . .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -e ".[dev,llm]"
 python scripts/make_samples.py                 # 生成合成样本
-pytest -q                                      # 139 个测试，全离线
+pytest -q                                      # 148 个测试，全离线
 python harness/run_eval.py --min-score 0.95    # 金标评测 + CI 门禁
 python -m sailbill demo                        # 端到端演示
+
+# 真实样本（TestSamples/ 需自行放入，不入库）
+SAILBILL_ACCOUNTING_ENTITY="你的公司全称" python -m sailbill run TestSamples --store out/no-store.json
+pytest tests/test_real_samples.py              # 真实样本回归（无样本时自动跳过）
 ```
+
+**两个必须显式配置、否则结果会"看起来没跑通"的项**
+
+- `SAILBILL_ACCOUNTING_ENTITY`（或 `--entity`）：没有记账主体就无法判定 AR/AP，记录会转
+  `PENDING_REVIEW`——这是刻意设计而非 bug；真实 Debit Note 配上主体即输出 `CREATE / AP`。
+- OCR 的**公网投递**：OCR 服务只会下载 URL，访问不到 `localhost`。本地文件需通过
+  `SAILBILL_FILE_DELIVERY`（`public` / `upload`）变成可下载地址，或设 `none` 走离线回放；
+  未配置时图片类文件转 `PENDING_REVIEW`。
 
 **红线（任何改动都不得违反）**
 
