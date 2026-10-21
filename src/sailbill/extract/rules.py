@@ -364,6 +364,52 @@ def _dedupe_charges(charges: list[ChargeExtraction]) -> tuple[list[ChargeExtract
     return list(seen.values()), warnings
 
 
+def _supplement_from_text(
+    charges: list[ChargeExtraction],
+    primary_text: str,
+    doc_currency: Optional[str],
+    result: DocExtraction,
+) -> list[ChargeExtraction]:
+    """Use text lines to fill gaps when a table extraction is only partial.
+
+    Table parsing is precise but can miss rows (merged cells, pdfplumber row
+    collapsing).  When the extracted rows do not add up to the document total,
+    the free-text parser is given a chance -- and only rows that are genuinely
+    new are added, so nothing is double counted.
+    """
+    if not result.total_amount.is_present:
+        return charges
+    total = float(result.total_amount.value or 0)
+    current = round(sum(float(c.amount or 0) for c in charges), 2)
+    if abs(current - total) <= 0.01:
+        return charges
+
+    extra = charges_from_text(primary_text, doc_currency=doc_currency)
+    if not extra:
+        return charges
+
+    known = {(str(c.charge_item), round(float(c.amount or 0), 2), c.currency) for c in charges}
+    added: list[ChargeExtraction] = []
+    for candidate in extra:
+        key = (str(candidate.charge_item), round(float(candidate.amount or 0), 2), candidate.currency)
+        if key in known:
+            continue
+        known.add(key)
+        added.append(candidate)
+
+    if not added:
+        return charges
+    merged = charges + added
+    merged_sum = round(sum(float(c.amount or 0) for c in merged), 2)
+    if abs(merged_sum - total) < abs(current - total):
+        result.warnings.append(
+            f"表格仅抽出 {len(charges)} 条（合计 {current:.2f} ≠ 总额 {total:.2f}），"
+            f"已用文本行补齐 {len(added)} 条"
+        )
+        return merged
+    return charges
+
+
 # --------------------------------------------------------------------------- #
 # main entry
 # --------------------------------------------------------------------------- #
@@ -498,6 +544,9 @@ def extract_rules(
         current = getattr(result, field)
         if not current.is_present:
             setattr(result, field, Tri.present(amount, "表格合计行"))
+
+    if charges and primary is not None:
+        charges = _supplement_from_text(charges, primary.flatten_text(), doc_currency, result)
 
     if not charges:
         for d in ordered:

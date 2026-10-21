@@ -11,7 +11,7 @@ from ..models import NormalizedDocument, SourceKind, sha256_file, stable_doc_id
 
 _EXT_KIND = {
     ".eml": SourceKind.EML,
-    ".msg": SourceKind.EML,
+    ".msg": SourceKind.MSG,
     ".pdf": SourceKind.PDF,
     ".png": SourceKind.IMAGE,
     ".jpg": SourceKind.IMAGE,
@@ -96,6 +96,10 @@ def load_document(
         from .eml import parse_eml
 
         parse_eml(doc, settings=settings, depth=depth)
+    elif kind is SourceKind.MSG:
+        from .msg import parse_msg
+
+        parse_msg(doc, settings=settings, depth=depth)
     elif kind is SourceKind.EXCEL:
         from .excel import parse_excel
 
@@ -140,7 +144,7 @@ def load_tree(
     seen.add(doc.sha256)
     docs = [doc]
 
-    if doc.kind is SourceKind.EML and _depth < settings.max_attachment_depth:
+    if doc.kind in {SourceKind.EML, SourceKind.MSG} and _depth < settings.max_attachment_depth:
         for att in doc.attachments:
             if not att.path:
                 continue

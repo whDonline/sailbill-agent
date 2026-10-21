@@ -141,7 +141,7 @@ def _parse_xls_legacy(doc: NormalizedDocument, path: Path) -> None:
             doc.add_block(" | ".join(v for v in row if v), kind="table_cell", row=i, table_id=table.table_id)
 
 
-def _guess_header_row(rows: list[list[str]], window: int = 15) -> int | None:
+def guess_header_row(rows: list[list[str]], window: int = 15) -> int | None:
     """Pick the most header-looking row: many short labels, few pure numbers."""
     best, best_score = None, 0.0
     for i, row in enumerate(rows[:window]):
@@ -154,6 +154,10 @@ def _guess_header_row(rows: list[list[str]], window: int = 15) -> int | None:
         if words >= 2 and score > best_score:
             best, best_score = i, score
     return best
+
+
+# kept for the internal call sites / older imports
+_guess_header_row = guess_header_row
 
 
 def _looks_numeric(text: str) -> bool:

@@ -232,7 +232,7 @@ ocr_result = response.json()
 
 | 题面条目 | 实现位置 | 验证方式 |
 | --- | --- | --- |
-| 二.1/2 EML 正文、邮件头、附件递归 | [`src/sailbill/ingest/eml.py`](src/sailbill/ingest/eml.py)、[`router.load_tree`](src/sailbill/ingest/router.py) | [`tests/test_ingest.py`](tests/test_ingest.py) |
+| 二.1/2 EML 正文、邮件头、附件递归 | [`src/sailbill/ingest/eml.py`](src/sailbill/ingest/eml.py)、[`router.load_tree`](src/sailbill/ingest/router.py)、[`msg.py`](src/sailbill/ingest/msg.py)（Outlook） | [`tests/test_ingest.py`](tests/test_ingest.py)、[`docs/parsing.md`](docs/parsing.md) |
 | 二.3 OCR API | [`src/sailbill/ingest/ocr.py`](src/sailbill/ingest/ocr.py) | [`tests/test_ocr_adapter.py`](tests/test_ocr_adapter.py)、`sailbill ocr <file>` |
 | 四.1 Excel/Word 费用表 | [`ingest/excel.py`](src/sailbill/ingest/excel.py)、[`ingest/word.py`](src/sailbill/ingest/word.py)、[`extract/tables.py`](src/sailbill/extract/tables.py) | `tests/test_ingest.py` |
 | 四.2 业务要素提取 | [`src/sailbill/extract/rules.py`](src/sailbill/extract/rules.py) + [`lexicon.py`](src/sailbill/extract/lexicon.py) | `harness/run_eval.py` |
@@ -251,9 +251,9 @@ ocr_result = response.json()
 
 ```bash
 python -m venv .venv && . .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -e ".[dev,llm]"
+pip install -e ".[dev,llm,msg,xls]"
 python scripts/make_samples.py                 # 生成合成样本
-pytest -q                                      # 148 个测试，全离线
+pytest -q                                      # 152 个测试，全离线
 python harness/run_eval.py --min-score 0.95    # 金标评测 + CI 门禁
 python -m sailbill demo                        # 端到端演示
 

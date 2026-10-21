@@ -1,4 +1,4 @@
-﻿"""Ingestion: PDF text layer, Excel headers, Word merged cells, recursive EML."""
+"""Ingestion: PDF text layer, Excel headers, Word merged cells, recursive EML."""
 
 from __future__ import annotations
 
@@ -66,3 +66,41 @@ def test_unknown_binary_is_reported(scratch):
     doc = load_tree(path)[0]
     assert doc.kind is SourceKind.UNKNOWN
     assert doc.warnings or doc.text == ""
+
+
+def test_html_table_in_mail_becomes_pipe_lines():
+    from sailbill.normalize.html import html_to_text
+
+    html = (
+        "<p>Please find the revised note.</p>"
+        "<table><tr><th>Charge</th><th>Amount</th></tr>"
+        "<tr><td>THC</td><td>40.00</td></tr></table>"
+    )
+    text = html_to_text(html)
+    assert "Please find the revised note." in text
+    assert "Charge | Amount" in text
+    assert "THC | 40.00" in text
+
+
+def test_html_scripts_and_styles_are_dropped():
+    from sailbill.normalize.html import html_to_text
+
+    text = html_to_text("<style>.a{color:red}</style><script>alert(1)</script><p>Body</p>")
+    assert "Body" in text
+    assert "color" not in text and "alert" not in text
+
+
+def test_outlook_msg_is_routed_and_fails_soft(scratch):
+    """`.msg` is an OLE container; it must never be handed to the email module."""
+    path = scratch / "broken.msg"
+    path.write_bytes(b"\x00" * 128)
+    doc = load_tree(path)[0]
+    assert doc.kind is SourceKind.MSG
+    assert doc.warnings  # failure recorded, not raised
+
+
+def test_text_only_pdf_does_not_use_pdfplumber_tables(samples_dir):
+    """The gate: borderless bills keep using the line parser, because pdfplumber
+    fragments their cells ('DU' / 'E DATE')."""
+    doc = load_tree(samples_dir / "debit_note.pdf")[0]
+    assert doc.tables == []

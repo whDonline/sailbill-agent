@@ -39,7 +39,7 @@
 ```bash
 git clone <your-repo-url> && cd sailbill-agent
 python -m venv .venv && . .venv/bin/activate      # Windows: .venv\Scripts\activate
-pip install -e ".[dev,llm]"
+pip install -e ".[dev,llm,msg,xls]"                # msg=Outlook .msg，xls=旧版 Excel
 python scripts/make_samples.py                     # 生成合成样本（不含任何真实客户数据）
 sailbill demo                                      # 跑通全链路
 ```
@@ -246,8 +246,8 @@ sailbill-agent/
 ├─ eval/golden/*.json           # 6 个金标用例
 ├─ samples/                     # 合成样本（脚本生成，无真实数据）
 ├─ scripts/make_samples.py      # 含极简 PDF 生成器（零第三方依赖）
-├─ tests/                       # 136 个测试
-└─ docs/  architecture.md · harness.md · reflections.md · adr/
+├─ tests/                       # 152 个测试
+└─ docs/  architecture.md · parsing.md · harness.md · reflections.md · adr/
 ```
 
 ---

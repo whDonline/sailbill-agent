@@ -37,7 +37,7 @@ from .validate import has_blocking_issue, score_charge, validate_extraction
 MAX_REASONING = 10
 
 _SUPPORTED_SUFFIXES = {
-    ".eml", ".pdf", ".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp",
+    ".eml", ".msg", ".pdf", ".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp",
     ".xlsx", ".xls", ".xlsm", ".csv", ".docx", ".doc", ".txt", ".json",
 }
 

@@ -81,6 +81,7 @@ class Tri(Generic[T]):
 # --------------------------------------------------------------------------- #
 class SourceKind(str, Enum):
     EML = "eml"
+    MSG = "msg"
     PDF = "pdf"
     IMAGE = "image"
     EXCEL = "excel"
