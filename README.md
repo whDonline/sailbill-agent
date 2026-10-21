@@ -131,7 +131,7 @@ flowchart TD
 | 校验 | `src/sailbill/validate/` | 业务校验（阻断/警告/提示）+ 可解释置信度 |
 | 决策 | `matching.py` / `finance.py` | 四级匹配、操作类型、AR/AP 矩阵 |
 | 输出 | `output.py` / `pipeline.py` | 契约序列化、编排、trace |
-| 编排 | `pipeline.py`（classic） / `graph.py`（LangGraph） | 同一批阶段函数，两种驱动：顺序执行 / 状态机+断点 |
+| 编排 | `graph.py`（LangGraph 状态机） | extract → validate → posting → decide → commit，逐节点 checkpoint + 写账前人工闸门 |
 | 评测 | `harness/` | 金标集、9 项指标、CI 门禁 |
 
 ---
@@ -228,9 +228,9 @@ sailbill ocr samples/debit_note.pdf                                          # �
 sailbill eval --min-score 0.9                                                # 金标评测（CI 门禁）
 python harness/run_eval.py --llm                                             # 含大模型的评测
 
-# LangGraph 引擎（pip install -e ".[graph]"）
-sailbill run samples/ --engine langgraph --commit --save-bills out/bills.json # 状态机 + 写回账单库
-sailbill run samples/debit_note.pdf --engine langgraph --hitl --commit        # 写账前暂停等人工确认
+# 写回账单库 / 写账前人工确认（LangGraph 状态机）
+sailbill run samples/ --commit --save-bills out/bills.json                    # 把 CREATE/UPDATE 写回账单库
+sailbill run samples/debit_note.pdf --hitl --commit                          # 写账前暂停，等人确认
 ```
 
 退出码：`0` 成功，`1` 出错或评测未达标，`2` 参数/输入问题 —— 便于接入流水线。
@@ -252,7 +252,7 @@ sailbill-agent/
 ├─ eval/golden/*.json           # 6 个金标用例
 ├─ samples/                     # 合成样本（脚本生成，无真实数据）
 ├─ scripts/make_samples.py      # 含极简 PDF 生成器（零第三方依赖）
-├─ tests/                       # 184 个测试
+├─ tests/                       # 186 个测试
 └─ docs/  architecture.md · parsing.md · graph.md · harness.md · reflections.md · adr/
 ```
 

@@ -20,6 +20,7 @@ classifiers = [
 dependencies = [
   "pydantic>=2.5",
   "langchain-core>=0.3",
+  "langgraph>=0.2",
   "python-docx>=1.1",
   "openpyxl>=3.1",
   "pypdf>=4.0",
@@ -31,8 +32,6 @@ dependencies = [
 
 [project.optional-dependencies]
 llm = ["langchain-openai>=0.2"]
-# LangGraph orchestration engine (--engine langgraph), with checkpointing + HITL
-graph = ["langgraph>=0.2"]
 # Outlook .msg is an OLE container; the email module cannot read it
 msg = ["extract-msg>=0.48"]
 # legacy .xls (BIFF) workbooks

@@ -68,7 +68,6 @@ def cmd_run(args: argparse.Namespace) -> int:
         store=store,
         accounting_entity=args.entity,
         use_llm=not args.no_llm and settings.llm_enabled,
-        engine=args.engine,
         hitl=args.hitl,
         commit=args.commit,
     )
@@ -241,13 +240,7 @@ def build_parser() -> argparse.ArgumentParser:
     run_p.add_argument("--extended", action="store_true", help="附加置信度/证据/匹配细节")
     run_p.add_argument("--offline", action="store_true", help="不发起任何网络调用")
     run_p.add_argument("--no-llm", action="store_true", help="只用规则引擎")
-    run_p.add_argument(
-        "--engine",
-        choices=["classic", "langgraph"],
-        default="classic",
-        help="编排引擎：classic 顺序执行，langgraph 走状态机（需 pip install -e '.[graph]'）",
-    )
-    run_p.add_argument("--hitl", action="store_true", help="LangGraph 引擎：在写账前暂停，等待人工确认")
+    run_p.add_argument("--hitl", action="store_true", help="在写账前暂停（LangGraph interrupt），等待人工确认")
     run_p.add_argument("--commit", action="store_true", help="把 CREATE/UPDATE 结果写回账单库")
     run_p.add_argument("--save-bills", default=None, help="配合 --commit，把更新后的账单库另存为文件")
     run_p.add_argument("--quiet", action="store_true", help="不打印 JSON 到标准输出")

@@ -1,21 +1,19 @@
-"""LangGraph engine: parity with the classic engine, commit, and HITL pause.
+"""The agent engine: a LangGraph state machine.
 
-The parity test is the important one -- it pins the graph to the sequential
-pipeline so a refactor of either side cannot silently change the books.
+These tests pin the behaviour that the graph buys us -- checkpoints, a human
+gate before writing to the books, and deterministic commits -- plus the
+regressions that the migration surfaced.
 """
 
 from __future__ import annotations
 
+import inspect
 from dataclasses import replace
 
-import pytest
-
 from sailbill.config import SETTINGS
-from sailbill.output import as_json, summarize
+from sailbill.output import as_json
 from sailbill.pipeline import run_paths
 from sailbill.store import BillStore
-
-pytest.importorskip("langgraph", reason="需要 pip install -e '.[graph]'")
 
 SAMPLE_FILES = [
     "debit_note.pdf",
@@ -36,40 +34,41 @@ def _paths(samples_dir):
 
 
 # --------------------------------------------------------------------------- #
-# parity
+# the graph is the engine
 # --------------------------------------------------------------------------- #
-def test_graph_matches_classic(samples_dir, settings):
-    classic = run_paths(
-        _paths(samples_dir),
-        settings=_settings(settings),
-        store=BillStore(),
-        use_llm=False,
-        engine="classic",
-    )
-    graph = run_paths(
-        _paths(samples_dir),
-        settings=_settings(settings),
-        store=BillStore(),
-        use_llm=False,
-        engine="langgraph",
-    )
-    assert [as_json(r) for r in classic.records] == [as_json(r) for r in graph.records]
-    assert summarize(classic.records) == summarize(graph.records)
-    assert all(unit.trace.get("engine") == "langgraph" for unit in graph.units)
+def test_pipeline_delegates_to_the_graph():
+    """There is one engine now: no ``engine=`` switch, no second code path."""
+    signature = inspect.signature(run_paths)
+    assert "engine" not in signature.parameters
+    assert "hitl" in signature.parameters and "commit" in signature.parameters
 
 
-def test_graph_trace_marks_engine(samples_dir, settings):
+def test_every_unit_is_traced_as_langgraph(samples_dir, settings):
     result = run_paths(
-        [_paths(samples_dir)[0]],
-        settings=_settings(settings),
-        store=BillStore(),
-        use_llm=False,
-        engine="langgraph",
+        _paths(samples_dir), settings=_settings(settings), store=BillStore(), use_llm=False
     )
-    trace = result.traces[0]
-    assert trace["engine"] == "langgraph"
-    assert trace["paused_before_commit"] is False
-    assert trace["charges"] == 5
+    assert result.units
+    assert all(unit.trace["engine"] == "langgraph" for unit in result.units)
+    assert all(unit.trace["paused_before_commit"] is False for unit in result.units)
+    assert [as_json(record) for record in result.records]  # schema-serialisable
+
+
+def test_all_sample_types_are_processed(samples_dir, settings):
+    result = run_paths(
+        _paths(samples_dir),
+        settings=_settings(settings),
+        store=BillStore.from_file(samples_dir / "existing_bills.json"),
+        use_llm=False,
+        accounting_entity="XYZ Freight Forwarding Ltd",
+    )
+    # units are leaf documents; the EML itself is context for its attachment
+    kinds = {unit.trace["kind"] for unit in result.units}
+    assert kinds == {"pdf", "excel", "word"}
+    assert any(
+        doc.endswith(".eml") for unit in result.units for doc in unit.trace["context_docs"]
+    )
+    operations = {record.operation.value for record in result.records}
+    assert operations == {"CREATE", "NO_CHANGE", "UPDATE", "PENDING_REVIEW"}
 
 
 # --------------------------------------------------------------------------- #
@@ -83,13 +82,11 @@ def test_commit_writes_create_and_update_only(samples_dir, settings):
         settings=_settings(settings),
         store=store,
         use_llm=False,
-        engine="langgraph",
         commit=True,
     )
     operations = [record.operation.value for record in result.records]
     assert operations.count("NO_CHANGE") == 2
     # the update landed on the matched bill, not on a new one
-    assert store.get("B-1001") is not None
     thc = [line for line in store.get("B-1001").lines if line.charge_item == "Terminal Handling Charge"]
     assert thc and thc[0].amount == 300.0
     # the two CREATE rows go to an AUTO bill for this reference number
@@ -99,11 +96,27 @@ def test_commit_writes_create_and_update_only(samples_dir, settings):
     assert {line.charge_item for line in created.lines} == {"Customs Clearance Fee", "Handling Charge"}
 
 
+def test_commit_keeps_two_lines_with_the_same_charge_name(samples_dir, settings):
+    """A real debit note can carry two HANDLING CHARGE lines; merging them by
+    name alone drops money."""
+    store = BillStore()
+    run_paths(
+        [samples_dir / "debit_note.pdf"],
+        settings=_settings(settings),
+        store=store,
+        use_llm=False,
+        accounting_entity="XYZ Freight Forwarding Ltd",
+        commit=True,
+    )
+    bill = store.get("AUTO-DN-202609-001")
+    handling = [line for line in bill.lines if line.charge_item == "Handling Charge"]
+    assert len(handling) == 1  # the sample has a single handling line
+    assert abs(sum(line.amount for line in bill.lines) - 3220.00) <= 0.01
+
+
 def test_commit_is_idempotent(samples_dir, settings):
     store = BillStore.from_file(samples_dir / "existing_bills.json")
-    kwargs = dict(
-        settings=_settings(settings), store=store, use_llm=False, engine="langgraph", commit=True
-    )
+    kwargs = dict(settings=_settings(settings), store=store, use_llm=False, commit=True)
     run_paths([samples_dir / "debit_note.pdf"], **kwargs)
     after_first = len(store.all())
     lines_first = sum(len(bill.lines) for bill in store.all())
@@ -119,7 +132,6 @@ def test_pending_review_is_never_committed(samples_dir, settings):
         settings=_settings(settings),
         store=store,
         use_llm=False,
-        engine="langgraph",
         commit=True,
     )
     assert all(record.operation.value == "PENDING_REVIEW" for record in result.records)
@@ -138,7 +150,6 @@ def test_empty_store_instance_is_not_replaced(samples_dir, settings):
         store=store,
         use_llm=False,
         accounting_entity="XYZ Freight Forwarding Ltd",
-        engine="classic",
         commit=True,
     )
     assert len(store) == 1  # one AUTO bill holding all five CREATE rows
@@ -159,7 +170,6 @@ def test_hitl_pauses_before_commit_and_resumes(samples_dir, settings):
         settings=_settings(settings),
         store=store,
         use_llm=False,
-        engine="langgraph",
         hitl=True,
         commit=True,
     )
@@ -181,7 +191,6 @@ def test_hitl_without_commit_does_not_pause(samples_dir, settings):
         settings=_settings(settings),
         store=store,
         use_llm=False,
-        engine="langgraph",
         hitl=True,
         commit=False,
     )

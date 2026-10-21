@@ -261,9 +261,9 @@ python -m sailbill demo                        # 端到端演示
 SAILBILL_ACCOUNTING_ENTITY="你的公司全称" python -m sailbill run TestSamples --store out/no-store.json
 pytest tests/test_real_samples.py              # 真实样本回归（无样本时自动跳过）
 
-# LangGraph 引擎（可选依赖 .[graph]）
-python -m sailbill run TestSamples --engine langgraph --commit --save-bills out/bills.json
-python -m sailbill run samples/debit_note.pdf --engine langgraph --hitl --commit   # 写账前暂停
+# 状态机引擎（LangGraph 是核心依赖，无需额外安装）
+python -m sailbill run TestSamples --commit --save-bills out/bills.json
+python -m sailbill run samples/debit_note.pdf --hitl --commit   # 写账前暂停，人工确认后 resume
 ```
 
 **两个必须显式配置、否则结果会"看起来没跑通"的项**

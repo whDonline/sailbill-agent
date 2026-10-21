@@ -1,31 +1,26 @@
-"""LangGraph orchestration (optional engine).
+"""LangGraph orchestration -- the engine of the agent.
 
-The sequential pipeline answers *"what are the steps"*; a graph answers the
-harder production questions:
+A document flows through a small state machine::
 
-* **Where can a human step in?**  ``interrupt_before=["commit"]`` pauses the run
-  after the decisions are made and *before* anything is written to the books.
-  A reviewer inspects the proposals and resumes the same graph.
-* **Where exactly did a document fail?**  Checkpoints land between stages, so a
-  resumed run does not redo OCR or model calls.
-* **Can the flow differ per document?**  Conditional edges route a document with
-  no charges straight past matching.
+    START → extract → validate → posting → decide → commit → END
+                                          ╰──(no charges)────────╯
 
-Everything is reused from :mod:`sailbill.pipeline` -- the nodes are the *same*
-stage functions the classic engine calls in sequence, which is why the two
-engines are verified to produce identical records
-(``tests/test_graph.py::test_graph_matches_classic``).
+Why a graph instead of a for-loop:
 
-Design note: the graph **state holds only JSON-native data** (a document id and
-the trace).  The rich objects (``UnitState`` with Pydantic models) live in an
-in-process registry keyed by that id, because a checkpointer must be able to
-serialise every channel -- and LangGraph's msgpack serde cannot round-trip
-arbitrary Pydantic graphs.  That keeps the checkpoint small and portable; the
-trade-off is documented in ``docs/graph.md``.
+* **A human can step in.**  ``interrupt_before=["commit"]`` pauses after the
+  decisions are made and *before* anything is written to the books; a reviewer
+  inspects the proposals and resumes the very same run.
+* **A failure has an address.**  Each node is checkpointed, so you can see which
+  stage raised and resume instead of re-running OCR and model calls.
+* **The flow can branch per document.**  A bill of lading carries no charges, so
+  it does not need matching at all.
 
-Install with::
-
-    pip install -e ".[graph]"
+Implementation note -- the graph channels stay **JSON-native** (a document id and
+the trace).  LangGraph's msgpack serde cannot round-trip arbitrary Pydantic
+objects: the first version put the whole dataclass in the state and the
+checkpoint came back with ``records == []``, so a resumed human-in-the-loop run
+silently committed nothing.  The rich state therefore lives in an in-process
+registry keyed by ``doc_id`` (see ``docs/graph.md``).
 """
 
 from __future__ import annotations
@@ -33,19 +28,25 @@ from __future__ import annotations
 import time
 from typing import Any, Optional, TypedDict
 
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.graph import END, START, StateGraph
+
 from .config import Settings
+from .extract import extract_document
+from .finance import determine_posting
+from .matching import match_charge
 from .models import BillRecordOut, NormalizedDocument
 from .normalize.parties import PartyResolver
 from .pipeline import (
     UnitOutcome,
     UnitState,
-    stage_decide,
-    stage_extract,
-    stage_posting,
-    stage_trace,
-    stage_validate,
+    build_trace,
+    decide_and_build,
+    infer_entity,
+    pending_record,
 )
 from .store import BillStore
+from .validate import score_charge, validate_extraction
 
 
 class GraphState(TypedDict, total=False):
@@ -53,15 +54,6 @@ class GraphState(TypedDict, total=False):
 
     doc_id: str
     trace: dict[str, Any]
-
-
-def _require_langgraph() -> None:
-    try:
-        from langgraph.graph import END, START, StateGraph  # noqa: F401
-    except ImportError as exc:  # pragma: no cover - optional dependency
-        raise RuntimeError(
-            '使用 --engine langgraph 需要安装 LangGraph：pip install -e ".[graph]"'
-        ) from exc
 
 
 def build_graph(
@@ -77,36 +69,83 @@ def build_graph(
 ):
     """Compile the per-document graph.
 
-    Nodes: extract → validate → posting → decide → commit → finish.
+    Nodes: extract → validate → posting → decide → commit.
     With ``hitl`` the graph pauses *before* ``commit`` and keeps a checkpoint.
     """
-    _require_langgraph()
-    from langgraph.checkpoint.memory import MemorySaver
-    from langgraph.graph import END, START, StateGraph
 
     def _ctx(state: GraphState) -> UnitState:
         return registry[state["doc_id"]]
 
+    # -- nodes ------------------------------------------------------------
     def node_extract(state: GraphState) -> dict[str, Any]:
-        stage_extract(_ctx(state), settings=settings, resolver=resolver, use_llm=use_llm)
+        ctx = _ctx(state)
+        docs = [ctx.primary, *ctx.context]
+        ctx.extraction = extract_document(
+            docs, settings=settings, resolver=resolver, use_llm=use_llm
+        )
         return {}
 
     def node_validate(state: GraphState) -> dict[str, Any]:
-        stage_validate(_ctx(state), settings=settings)
+        ctx = _ctx(state)
+        assert ctx.extraction is not None
+        ctx.issues = validate_extraction(ctx.extraction, settings=settings)
         return {}
 
     def node_posting(state: GraphState) -> dict[str, Any]:
-        stage_posting(
-            _ctx(state),
-            settings=settings,
-            store=store,
-            resolver=resolver,
-            accounting_entity=accounting_entity,
+        ctx = _ctx(state)
+        assert ctx.extraction is not None
+        ctx.entity = (
+            accounting_entity
+            or settings.accounting_entity
+            or infer_entity(ctx.extraction, store, resolver)
+        )
+        ctx.posting = determine_posting(
+            ctx.extraction, accounting_entity=ctx.entity, resolver=resolver
         )
         return {}
 
     def node_decide(state: GraphState) -> dict[str, Any]:
-        stage_decide(_ctx(state), settings=settings, store=store, resolver=resolver)
+        ctx = _ctx(state)
+        ext, posting = ctx.extraction, ctx.posting
+        assert ext is not None and posting is not None
+
+        if not ext.charges:
+            ctx.records.append(
+                pending_record(ext, posting, ctx.issues, reason="未能从单据中提取到任何费用明细")
+            )
+            ctx.extras.append(
+                {
+                    "source_file": ctx.primary.filename,
+                    "confidence": 0.0,
+                    "issues": [issue.model_dump() for issue in ctx.issues],
+                    "warnings": ext.warnings,
+                    "extractor": ext.extractor,
+                }
+            )
+            return {}
+
+        for charge in ext.charges:
+            outcome = match_charge(charge, ext, store.all(), resolver=resolver)
+            confidence = score_charge(
+                ext,
+                charge,
+                issues=ctx.issues,
+                match=outcome.match,
+                ambiguous_match=outcome.ambiguous,
+                settings=settings,
+            )
+            record, extra = decide_and_build(
+                charge,
+                ext,
+                outcome,
+                posting,
+                ctx.issues,
+                confidence,
+                settings=settings,
+                primary=ctx.primary,
+            )
+            ctx.records.append(record)
+            ctx.extras.append(extra)
         return {}
 
     def node_commit(state: GraphState) -> dict[str, Any]:
@@ -114,6 +153,7 @@ def build_graph(
         touched = store.apply_records(ctx.records, ctx.extras)
         return {"trace": {"committed_bills": touched}}
 
+    # -- wiring -------------------------------------------------------------
     graph = StateGraph(GraphState)
     graph.add_node("extract", node_extract)
     graph.add_node("validate", node_validate)
@@ -133,9 +173,8 @@ def build_graph(
     if commit:
         graph.add_edge("commit", END)
 
-    checkpointer = MemorySaver() if hitl else None
     return graph.compile(
-        checkpointer=checkpointer,
+        checkpointer=MemorySaver(),
         interrupt_before=["commit"] if (hitl and commit) else None,
     )
 
@@ -168,11 +207,8 @@ def run_unit_graph(
         hitl=hitl,
     )
     config = {"configurable": {"thread_id": primary.doc_id}}
-    out = graph.invoke({"doc_id": primary.doc_id}, config=config) if hitl else graph.invoke(
-        {"doc_id": primary.doc_id}
-    )
-
-    paused = bool(graph.get_state(config).next) if hitl else False
+    out = graph.invoke({"doc_id": primary.doc_id}, config=config)
+    paused = bool(graph.get_state(config).next)
 
     outcome = UnitOutcome(
         filename=primary.filename,
@@ -181,7 +217,7 @@ def run_unit_graph(
     )
     outcome.records = list(ctx.records)
     outcome.extras = list(ctx.extras)
-    trace = stage_trace(ctx, elapsed=time.perf_counter() - started)
+    trace = build_trace(ctx, elapsed=time.perf_counter() - started)
     trace["engine"] = "langgraph"
     trace["paused_before_commit"] = paused
     if isinstance(out, dict) and isinstance(out.get("trace"), dict):
@@ -194,5 +230,5 @@ def run_unit_graph(
 
 
 def records_of(outcome: UnitOutcome) -> list[BillRecordOut]:
-    """Typed accessor used by callers that want validated records back."""
+    """Typed accessor for callers that want validated records back."""
     return [BillRecordOut.model_validate(record.model_dump()) for record in outcome.records]

@@ -150,14 +150,20 @@ def run_paths(
     accounting_entity: Optional[str] = None,
     use_llm: bool = True,
     include_context_docs: bool = True,
-    engine: str = "classic",
     hitl: bool = False,
     commit: bool = False,
 ) -> RunResult:
+    """Run documents through the graph engine.
+
+    Orchestration lives in :mod:`sailbill.graph`; this function owns the outer
+    loop (file → document tree → bill units) and keeps the public API stable.
+    """
     settings = settings or SETTINGS
     store = store if store is not None else BillStore()
     resolver = PartyResolver()
     result = RunResult()
+
+    from .graph import run_unit_graph  # lazy: graph imports this module
 
     for path in _expand_paths(paths):
         started = time.perf_counter()
@@ -165,23 +171,17 @@ def run_paths(
         _ensure_ocr(docs, settings, ocr_holder={})
         for context, primary in split_units(docs):
             unit_context = context if include_context_docs else []
-            kwargs = dict(
+            unit = run_unit_graph(
+                primary,
+                unit_context,
                 settings=settings,
                 store=store,
                 resolver=resolver,
                 accounting_entity=accounting_entity,
                 use_llm=use_llm,
+                hitl=hitl,
+                commit=commit,
             )
-            if engine == "langgraph":
-                from .graph import run_unit_graph
-
-                unit = run_unit_graph(
-                    primary, unit_context, hitl=hitl, commit=commit, **kwargs
-                )
-            else:
-                unit = _process_unit(primary, unit_context, **kwargs)
-                if commit:
-                    store.apply_records(unit.records, unit.extras)
             unit.trace["elapsed_s"] = round(time.perf_counter() - started, 3)
             result.units.append(unit)
 
@@ -192,10 +192,12 @@ def run_paths(
 
 @dataclass
 class UnitState:
-    """Mutable state that flows through the stages.
+    """Per-document state owned by the graph registry.
 
-    Both engines share these stages: the classic one runs them in sequence, the
-    LangGraph one runs each as a node (and can pause/checkpoint between them).
+    Only ``doc_id`` and the trace ever enter the graph channels: a checkpointer
+    must be able to serialise every channel, and LangGraph's msgpack serde cannot
+    round-trip arbitrary Pydantic objects.  The rich state therefore lives here,
+    in-process, keyed by ``doc_id``.
     """
 
     primary: NormalizedDocument
@@ -208,93 +210,7 @@ class UnitState:
     extras: list[dict[str, Any]] = field(default_factory=list)
 
 
-def stage_extract(
-    state: UnitState,
-    *,
-    settings: Settings,
-    resolver: PartyResolver,
-    use_llm: bool,
-) -> UnitState:
-    docs = [state.primary, *state.context]
-    state.extraction = extract_document(docs, settings=settings, resolver=resolver, use_llm=use_llm)
-    return state
-
-
-def stage_validate(state: UnitState, *, settings: Settings) -> UnitState:
-    assert state.extraction is not None
-    state.issues = validate_extraction(state.extraction, settings=settings)
-    return state
-
-
-def stage_posting(
-    state: UnitState,
-    *,
-    settings: Settings,
-    store: BillStore,
-    resolver: PartyResolver,
-    accounting_entity: Optional[str],
-) -> UnitState:
-    assert state.extraction is not None
-    state.entity = (
-        accounting_entity
-        or settings.accounting_entity
-        or _infer_entity(state.extraction, store, resolver)
-    )
-    state.posting = determine_posting(state.extraction, accounting_entity=state.entity, resolver=resolver)
-    return state
-
-
-def stage_decide(
-    state: UnitState,
-    *,
-    settings: Settings,
-    store: BillStore,
-    resolver: PartyResolver,
-) -> UnitState:
-    ext = state.extraction
-    assert ext is not None and state.posting is not None
-
-    if not ext.charges:
-        state.records.append(
-            _pending_record(ext, state.posting, state.issues, reason="未能从单据中提取到任何费用明细")
-        )
-        state.extras.append(
-            {
-                "source_file": state.primary.filename,
-                "confidence": 0.0,
-                "issues": [issue.model_dump() for issue in state.issues],
-                "warnings": ext.warnings,
-                "extractor": ext.extractor,
-            }
-        )
-        return state
-
-    for charge in ext.charges:
-        match_outcome = match_charge(charge, ext, store.all(), resolver=resolver)
-        confidence = score_charge(
-            ext,
-            charge,
-            issues=state.issues,
-            match=match_outcome.match,
-            ambiguous_match=match_outcome.ambiguous,
-            settings=settings,
-        )
-        record, extra = _decide_and_build(
-            charge,
-            ext,
-            match_outcome,
-            state.posting,
-            state.issues,
-            confidence,
-            settings=settings,
-            primary=state.primary,
-        )
-        state.records.append(record)
-        state.extras.append(extra)
-    return state
-
-
-def stage_trace(state: UnitState, *, elapsed: float) -> dict[str, Any]:
+def build_trace(state: UnitState, *, elapsed: float) -> dict[str, Any]:
     ext = state.extraction
     assert ext is not None and state.posting is not None
     return {
@@ -316,35 +232,6 @@ def stage_trace(state: UnitState, *, elapsed: float) -> dict[str, Any]:
     }
 
 
-def _process_unit(
-    primary: NormalizedDocument,
-    context: list[NormalizedDocument],
-    *,
-    settings: Settings,
-    store: BillStore,
-    resolver: PartyResolver,
-    accounting_entity: Optional[str],
-    use_llm: bool,
-) -> UnitOutcome:
-    """Classic sequential engine: the same stages, one after another."""
-    started = time.perf_counter()
-    state = UnitState(primary=primary, context=list(context))
-    stage_extract(state, settings=settings, resolver=resolver, use_llm=use_llm)
-    stage_validate(state, settings=settings)
-    stage_posting(state, settings=settings, store=store, resolver=resolver, accounting_entity=accounting_entity)
-    stage_decide(state, settings=settings, store=store, resolver=resolver)
-
-    outcome = UnitOutcome(
-        filename=primary.filename,
-        doc_id=primary.doc_id,
-        extraction=state.extraction,
-    )
-    outcome.records = state.records
-    outcome.extras = state.extras
-    outcome.trace = stage_trace(state, elapsed=time.perf_counter() - started)
-    return outcome
-
-
 def _operation_counts(records: list) -> dict[str, int]:
     counts: dict[str, int] = {}
     for record in records:
@@ -355,7 +242,7 @@ def _operation_counts(records: list) -> dict[str, int]:
 # --------------------------------------------------------------------------- #
 # decision
 # --------------------------------------------------------------------------- #
-def _decide_and_build(
+def decide_and_build(
     charge: ChargeExtraction,
     ext: DocExtraction,
     match: MatchOutcome,
@@ -495,7 +382,7 @@ def _decide_and_build(
     return record, extra
 
 
-def _pending_record(
+def pending_record(
     ext: DocExtraction,
     posting: PostingDecision,
     issues: list[Issue],
@@ -568,7 +455,7 @@ def _change_summary(charge: ChargeExtraction, line, changed: list[str]) -> str:
     return f"（{', '.join(parts)}）" if parts else ""
 
 
-def _infer_entity(ext: DocExtraction, store: BillStore, resolver: PartyResolver) -> Optional[str]:
+def infer_entity(ext: DocExtraction, store: BillStore, resolver: PartyResolver) -> Optional[str]:
     """Use the accounting entity of the bill we would be updating, else the
     most common one in the store (demo-friendly default, overridable via CLI)."""
     for charge in ext.charges:

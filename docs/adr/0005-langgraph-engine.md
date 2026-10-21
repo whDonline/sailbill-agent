@@ -1,6 +1,6 @@
 # ADR 0005 · 编排层引入 LangGraph（作为可选引擎，而非替换）
 
-- 状态：已采纳
+- 状态：**已被 [ADR 0006](0006-single-langgraph-engine.md) 取代**（双引擎已合并为单一 LangGraph 引擎）
 - 日期：2026-10-22
 
 ## 背景
