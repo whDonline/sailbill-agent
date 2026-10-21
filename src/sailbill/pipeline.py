@@ -392,6 +392,10 @@ def _decide_and_build(
         "confidence_reasons": confidence.reasons,
         "evidence": charge.evidence,
         "charge_item_raw": charge.charge_item_raw,
+        # quantity/unit price are extracted and used for arithmetic validation,
+        # but the assignment's output contract has no field for them
+        "quantity": charge.quantity,
+        "unit_price": charge.unit_price,
         "matched_bill": bill.bill_id if bill else None,
         "matched_line": bill_line.line_id if bill_line else None,
         "match_rule": match.match.rule.value if match.match and match.match.rule else None,

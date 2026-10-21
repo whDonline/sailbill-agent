@@ -15,7 +15,7 @@ from typing import Iterable, Optional
 from ..models import ChargeExtraction, DocExtraction, NormalizedDocument, Tri
 from ..normalize.amounts import parse_amount, round2
 from ..normalize.charges import standardize_charge
-from ..normalize.currency import ISO_4217
+from ..normalize.currency import ISO_4217, normalize_currency
 from ..normalize.dates import parse_date
 from ..normalize.parties import PartyResolver
 from ..normalize.payment import normalize_payment_term
@@ -23,7 +23,8 @@ from . import lexicon
 from .tables import table_to_charges
 
 _CJK = "\u4e00-\u9fff"
-_NUM_TOKEN = re.compile(r"[-−(]?\d[\d,\s]*\.?\d*\)?")
+# NB: no \s inside the token -- allowing it makes "2   20.00" parse as 220.00
+_NUM_TOKEN = re.compile(r"[-−(]?\d[\d,]*(?:\.\d+)?\)?")
 # note: [ \t] -- never \s.  A separator that can eat a newline lets an empty
 # label ("CONSIGNEE", a table header with no value) capture the *next* line as
 # its value, which silently invents a counterparty.
@@ -116,6 +117,15 @@ def first_amount_in_line(line: str, *, after: int = 0) -> Optional[float]:
     return None
 
 
+def first_money_in_line(line: str, *, after: int = 0) -> Optional[float]:
+    """Leftmost *money-shaped* number ("VAT (10%): 100.00" -> 100.00, not 10)."""
+    for m in _MONEY_TOKEN.finditer(line, after):
+        parsed = parse_amount(m.group(0))
+        if parsed.ok:
+            return parsed.value
+    return first_amount_in_line(line, after=after)
+
+
 def detect_doc_type(text: str) -> tuple[Optional[str], Optional[str]]:
     """Document type from the *title area* first, then the whole document."""
     head = "\n".join(_lines(text)[:12])
@@ -155,8 +165,14 @@ def _pick_currency(text: str) -> tuple[Optional[str], Optional[str], bool]:
     evidence: dict[str, str] = {}
     for m in re.finditer(r"\b([A-Z]{3})\b", text):
         code = m.group(1)
-        if code not in ISO_4217 or code in _NOT_CURRENCY_WORDS:
+        if code in _NOT_CURRENCY_WORDS:
             continue
+        if code not in ISO_4217:
+            # aliases such as RMB are not ISO codes but map onto one
+            alias = normalize_currency(code).code
+            if not alias:
+                continue
+            code = alias
         if not _currency_context(text, m.start(), m.end()):
             continue
         counts[code] = counts.get(code, 0) + 1
@@ -211,18 +227,37 @@ def _totals(text: str, currency: Optional[str]) -> dict[str, tuple[Optional[floa
                 # skip the subtotal row when looking for the grand total
                 if field == "total_amount" and re.search(r"sub\s*-?\s*total", line, re.IGNORECASE):
                     continue
+                # "TOTAL: SAY ONE (40HQx1) CONTAINER" spells the amount out; the
+                # only number on that line is a container spec, not money
+                if re.search(r"\bSAY\b", line, re.IGNORECASE):
+                    continue
                 # FIRST number after the label: "TOTAL 1,410.40 0" -> 1410.40,
                 # not the trailing zero of the credit column
-                value = first_amount_in_line(line, after=match.end())
+                value = first_money_in_line(line, after=match.end())
                 if value is None:
                     value = first_amount_in_line(line)
-                if value is not None:
-                    hit_value, hit_line = round2(value), line
-                    break
+                if value is None or not _looks_like_money(line, value):
+                    continue
+                hit_value, hit_line = round2(value), line
+                break
             if hit_value is not None:
                 break
         out[field] = (hit_value, hit_line, seen)
     return out
+
+
+_MONEY_TOKEN = re.compile(r"\d[\d,]*[.,]\d{2,4}")
+
+
+def _looks_like_money(line: str, value: float) -> bool:
+    """A total needs a money-shaped number or an explicit currency on its line."""
+    if _MONEY_TOKEN.search(line):
+        return True
+    if _CCY_INLINE.search(line) or re.search(r"[$€£¥￥]", line):
+        return True
+    # integers are only accepted when they are the sole number and large enough
+    numbers = re.findall(r"\d[\d,]*", line)
+    return len(numbers) == 1 and abs(value) >= 100
 
 
 # --------------------------------------------------------------------------- #
@@ -271,7 +306,95 @@ def _split_by_currency(line: str) -> tuple[Optional[str], Optional[str], Optiona
     return line[: last.start()].strip(" -—|:."), rest, last.group(1).upper()
 
 
-def charges_from_text(text: str, *, doc_currency: Optional[str]) -> list[ChargeExtraction]:
+def _numbers_in(text: str) -> list[float]:
+    out: list[float] = []
+    for m in _NUM_TOKEN.finditer(text):
+        parsed = parse_amount(m.group(0))
+        if parsed.ok and parsed.value is not None:
+            out.append(parsed.value)
+    return out
+
+
+def _infer_qty_unit(text: str, amount: Optional[float]) -> tuple[Optional[float], Optional[float]]:
+    """Recover 数量/单价 when they are printed next to the amount.
+
+    Only accepted when the arithmetic actually closes (qty × unit == amount),
+    so a coincidence cannot invent numbers.
+    """
+    if amount is None:
+        return None, None
+    numbers = _numbers_in(text)
+    if len(numbers) < 3:
+        return None, None
+    qty, unit, printed = numbers[-3], numbers[-2], numbers[-1]
+    if abs(printed - amount) > 0.01 or not qty or not unit:
+        return None, None
+    if abs(qty * unit - amount) <= 0.01:
+        return qty, unit
+    return None, None
+
+
+def _parse_pipe_row(line: str, *, doc_currency: Optional[str]) -> Optional[ChargeExtraction]:
+    """A row that became ``a | b | c`` (HTML mail table, docx-less text)."""
+    cells = [cell.strip() for cell in line.split("|")]
+    cells = [cell for cell in cells if cell]
+    if len(cells) < 2:
+        return None
+    name = cells[0].strip(" .:：-")
+    if len(name) < 3 or len(name) > 60:
+        return None
+
+    std = standardize_charge(name)
+    currency: Optional[str] = None
+    term: Optional[str] = None
+    numbers: list[float] = []
+    for cell in cells[1:]:
+        if re.fullmatch(r"[A-Za-z]{3}", cell):
+            currency = normalize_currency(cell).code or currency
+            continue
+        if not re.search(r"\d", cell):
+            term = normalize_payment_term(cell).term or term
+            continue
+        parsed = parse_amount(cell)
+        if parsed.ok and parsed.value is not None:
+            numbers.append(parsed.value)
+
+    amount: Optional[float] = None
+    qty: Optional[float] = None
+    unit: Optional[float] = None
+    if len(numbers) >= 3:
+        amount = numbers[-1]
+        if abs(numbers[-3] * numbers[-2] - amount) <= 0.01:
+            qty, unit = numbers[-3], numbers[-2]
+    elif len(numbers) == 2:
+        qty, unit = numbers[0], numbers[1]
+        amount = round2(qty * unit)
+    elif len(numbers) == 1:
+        amount = numbers[0]
+    if amount is None:
+        return None
+
+    looks_like_fee = std.method != "unmapped" or bool(_FEE_WORD.search(name)) or currency is not None
+    if not looks_like_fee:
+        return None
+    return ChargeExtraction(
+        charge_item_raw=name,
+        charge_item=std.standard,
+        quantity=qty,
+        unit_price=unit,
+        amount=round2(amount),
+        currency=currency or doc_currency,
+        payment_term=term,
+        evidence=line,
+    )
+
+
+def charges_from_text(
+    text: str,
+    *,
+    doc_currency: Optional[str],
+    warnings: Optional[list[str]] = None,
+) -> list[ChargeExtraction]:
     """Last-resort parser for fee rows that survive only as text lines.
 
     Two shapes are handled: the space-aligned ``rate qty P/C amount`` table and
@@ -286,6 +409,18 @@ def charges_from_text(text: str, *, doc_currency: Optional[str]) -> list[ChargeE
                                       "amount due", "paid amount", "balance")):
             continue
         line = _LINE_NUMBER.sub("", raw_line)
+
+        # --- shape 0: pipe-separated row (HTML mail tables) ----------------
+        if "|" in line:
+            piped = _parse_pipe_row(line, doc_currency=doc_currency)
+            if piped is not None:
+                if piped.quantity and piped.unit_price:
+                    if warnings is not None:
+                        warnings.append(
+                            f"行 {piped.charge_item_raw}: 金额 {piped.amount} 由 数量×单价 推导"
+                        )
+                out.append(piped)
+                continue
 
         # --- shape 1: rate / qty / P|C / amount ---------------------------
         tail = _TAIL_PC.search(line)
@@ -337,10 +472,13 @@ def charges_from_text(text: str, *, doc_currency: Optional[str]) -> list[ChargeE
         parsed = parse_amount(rest)
         term_match = re.search(r"\b(PP|CC|P/P|PREPAID|COLLECT)\b", line, re.IGNORECASE)
         term = normalize_payment_term(term_match.group(1)).term if term_match else None
+        qty, unit = _infer_qty_unit(rest, amount)
         out.append(
             ChargeExtraction(
                 charge_item_raw=name,
                 charge_item=std.standard,
+                quantity=qty,
+                unit_price=unit,
                 amount=round2(amount),
                 currency=inline_currency or (parsed.currency_hint if parsed else None) or doc_currency,
                 payment_term=term,
@@ -384,7 +522,7 @@ def _supplement_from_text(
     if abs(current - total) <= 0.01:
         return charges
 
-    extra = charges_from_text(primary_text, doc_currency=doc_currency)
+    extra = charges_from_text(primary_text, doc_currency=doc_currency, warnings=result.warnings)
     if not extra:
         return charges
 
@@ -450,6 +588,9 @@ def extract_rules(
     if not value and ocr_meta.get("invoice_no"):
         value, evidence = str(ocr_meta["invoice_no"]), "OCR: invoiceNumber"
         seen = True
+    if value and _bad_reference(value):
+        result.warnings.append(f"单据编号疑似取到标签文本（{value!r}），已丢弃")
+        value = None
     result.reference_no = Tri.present(value, evidence) if value else (
         Tri.absent(evidence) if seen else Tri.unknown("未找到单据编号标签")
     )
@@ -495,6 +636,20 @@ def extract_rules(
     code, evidence, seen = _pick_currency(text)
     result.currency = Tri.present(code, evidence) if code else (Tri.absent("未发现币种标识") if seen else Tri.unknown())
     doc_currency = code
+
+    # ---- payment term (document level) ----------------------------------
+    term_raw, term_evidence, term_seen = labeled_value(
+        text,
+        ["payment term", "payment terms", "terms", "pp/cc", "prepaid/collect", "付款方式", "运费条款"],
+    )
+    term = normalize_payment_term(term_raw).term if term_raw else None
+    if term:
+        result.payment_term = Tri.present(term, term_evidence)
+    elif term_seen:
+        # "TERMS COD": the document states a term, but it is not PP/CC
+        result.payment_term = Tri.absent(term_evidence)
+    else:
+        result.payment_term = Tri.unknown("未找到付款方式标签")
 
     # ---- totals ---------------------------------------------------------
     totals = _totals(text, doc_currency)
@@ -562,7 +717,7 @@ def extract_rules(
         # free-text fallback uses the primary document only: prose in an email
         # body ("the handling fee became USD 45") must not become a charge row
         primary_text = primary.flatten_text() if primary else text
-        charges = charges_from_text(primary_text, doc_currency=doc_currency)
+        charges = charges_from_text(primary_text, doc_currency=doc_currency, warnings=result.warnings)
         if charges:
             result.warnings.append("费用明细来自文本行解析（未发现结构化表格）")
 
@@ -587,6 +742,16 @@ def extract_rules(
                     bucket.append(v)
     result.references = {k: v for k, v in refs.items() if v}
     return result
+
+
+def _bad_reference(value: str) -> bool:
+    """Reject a "reference" that is really the next label's text ("B/L")."""
+    text = (value or "").strip()
+    if not text:
+        return True
+    if not re.search(r"\d", text) and len(text) < 8:
+        return True
+    return bool(re.fullmatch(r"[A-Za-z/.\- ]+", text) and len(text) < 8)
 
 
 def _party_from_headers_or_labels(headers: dict, text: str, *, role: str) -> tuple[Optional[str], Optional[str]]:
