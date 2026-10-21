@@ -150,9 +150,12 @@ def run_paths(
     accounting_entity: Optional[str] = None,
     use_llm: bool = True,
     include_context_docs: bool = True,
+    engine: str = "classic",
+    hitl: bool = False,
+    commit: bool = False,
 ) -> RunResult:
     settings = settings or SETTINGS
-    store = store or BillStore()
+    store = store if store is not None else BillStore()
     resolver = PartyResolver()
     result = RunResult()
 
@@ -162,21 +165,155 @@ def run_paths(
         _ensure_ocr(docs, settings, ocr_holder={})
         for context, primary in split_units(docs):
             unit_context = context if include_context_docs else []
-            unit = _process_unit(
-                primary,
-                unit_context,
+            kwargs = dict(
                 settings=settings,
                 store=store,
                 resolver=resolver,
                 accounting_entity=accounting_entity,
                 use_llm=use_llm,
             )
+            if engine == "langgraph":
+                from .graph import run_unit_graph
+
+                unit = run_unit_graph(
+                    primary, unit_context, hitl=hitl, commit=commit, **kwargs
+                )
+            else:
+                unit = _process_unit(primary, unit_context, **kwargs)
+                if commit:
+                    store.apply_records(unit.records, unit.extras)
             unit.trace["elapsed_s"] = round(time.perf_counter() - started, 3)
             result.units.append(unit)
 
     result.summary = summarize(result.records)
     result.summary["files"] = len(list(paths))
     return result
+
+
+@dataclass
+class UnitState:
+    """Mutable state that flows through the stages.
+
+    Both engines share these stages: the classic one runs them in sequence, the
+    LangGraph one runs each as a node (and can pause/checkpoint between them).
+    """
+
+    primary: NormalizedDocument
+    context: list[NormalizedDocument] = field(default_factory=list)
+    extraction: Optional[DocExtraction] = None
+    issues: list[Issue] = field(default_factory=list)
+    entity: Optional[str] = None
+    posting: Optional[PostingDecision] = None
+    records: list = field(default_factory=list)
+    extras: list[dict[str, Any]] = field(default_factory=list)
+
+
+def stage_extract(
+    state: UnitState,
+    *,
+    settings: Settings,
+    resolver: PartyResolver,
+    use_llm: bool,
+) -> UnitState:
+    docs = [state.primary, *state.context]
+    state.extraction = extract_document(docs, settings=settings, resolver=resolver, use_llm=use_llm)
+    return state
+
+
+def stage_validate(state: UnitState, *, settings: Settings) -> UnitState:
+    assert state.extraction is not None
+    state.issues = validate_extraction(state.extraction, settings=settings)
+    return state
+
+
+def stage_posting(
+    state: UnitState,
+    *,
+    settings: Settings,
+    store: BillStore,
+    resolver: PartyResolver,
+    accounting_entity: Optional[str],
+) -> UnitState:
+    assert state.extraction is not None
+    state.entity = (
+        accounting_entity
+        or settings.accounting_entity
+        or _infer_entity(state.extraction, store, resolver)
+    )
+    state.posting = determine_posting(state.extraction, accounting_entity=state.entity, resolver=resolver)
+    return state
+
+
+def stage_decide(
+    state: UnitState,
+    *,
+    settings: Settings,
+    store: BillStore,
+    resolver: PartyResolver,
+) -> UnitState:
+    ext = state.extraction
+    assert ext is not None and state.posting is not None
+
+    if not ext.charges:
+        state.records.append(
+            _pending_record(ext, state.posting, state.issues, reason="未能从单据中提取到任何费用明细")
+        )
+        state.extras.append(
+            {
+                "source_file": state.primary.filename,
+                "confidence": 0.0,
+                "issues": [issue.model_dump() for issue in state.issues],
+                "warnings": ext.warnings,
+                "extractor": ext.extractor,
+            }
+        )
+        return state
+
+    for charge in ext.charges:
+        match_outcome = match_charge(charge, ext, store.all(), resolver=resolver)
+        confidence = score_charge(
+            ext,
+            charge,
+            issues=state.issues,
+            match=match_outcome.match,
+            ambiguous_match=match_outcome.ambiguous,
+            settings=settings,
+        )
+        record, extra = _decide_and_build(
+            charge,
+            ext,
+            match_outcome,
+            state.posting,
+            state.issues,
+            confidence,
+            settings=settings,
+            primary=state.primary,
+        )
+        state.records.append(record)
+        state.extras.append(extra)
+    return state
+
+
+def stage_trace(state: UnitState, *, elapsed: float) -> dict[str, Any]:
+    ext = state.extraction
+    assert ext is not None and state.posting is not None
+    return {
+        "file": state.primary.filename,
+        "doc_id": state.primary.doc_id,
+        "kind": state.primary.kind.value,
+        "context_docs": [doc.filename for doc in state.context],
+        "extractor": ext.extractor,
+        "sha256": state.primary.sha256,
+        "charges": len(ext.charges),
+        "issues": len(state.issues),
+        "errors": sum(1 for issue in state.issues if issue.severity == "error"),
+        "operations": _operation_counts(state.records),
+        "accounting_entity": state.entity,
+        "posting_type": state.posting.posting_type,
+        "ocr_cached": state.primary.meta.get("ocr_cached"),
+        "warnings": ext.warnings[:10],
+        "elapsed_s": round(elapsed, 3),
+    }
 
 
 def _process_unit(
@@ -189,74 +326,22 @@ def _process_unit(
     accounting_entity: Optional[str],
     use_llm: bool,
 ) -> UnitOutcome:
+    """Classic sequential engine: the same stages, one after another."""
     started = time.perf_counter()
-    docs = [primary, *context]
-    extraction = extract_document(docs, settings=settings, resolver=resolver, use_llm=use_llm)
-    issues = validate_extraction(extraction, settings=settings)
-
-    entity = accounting_entity or settings.accounting_entity or _infer_entity(extraction, store, resolver)
-    posting = determine_posting(extraction, accounting_entity=entity, resolver=resolver)
+    state = UnitState(primary=primary, context=list(context))
+    stage_extract(state, settings=settings, resolver=resolver, use_llm=use_llm)
+    stage_validate(state, settings=settings)
+    stage_posting(state, settings=settings, store=store, resolver=resolver, accounting_entity=accounting_entity)
+    stage_decide(state, settings=settings, store=store, resolver=resolver)
 
     outcome = UnitOutcome(
         filename=primary.filename,
         doc_id=primary.doc_id,
-        extraction=extraction,
+        extraction=state.extraction,
     )
-
-    if not extraction.charges:
-        outcome.records.append(
-            _pending_record(extraction, posting, issues, reason="未能从单据中提取到任何费用明细")
-        )
-        outcome.extras.append(
-            {
-                "source_file": primary.filename,
-                "confidence": 0.0,
-                "issues": [issue.model_dump() for issue in issues],
-                "warnings": extraction.warnings,
-                "extractor": extraction.extractor,
-            }
-        )
-    else:
-        for charge in extraction.charges:
-            match_outcome = match_charge(charge, extraction, store.all(), resolver=resolver)
-            confidence = score_charge(
-                extraction,
-                charge,
-                issues=issues,
-                match=match_outcome.match,
-                ambiguous_match=match_outcome.ambiguous,
-                settings=settings,
-            )
-            record, extra = _decide_and_build(
-                charge,
-                extraction,
-                match_outcome,
-                posting,
-                issues,
-                confidence,
-                settings=settings,
-                primary=primary,
-            )
-            outcome.records.append(record)
-            outcome.extras.append(extra)
-
-    outcome.trace = {
-        "file": primary.filename,
-        "doc_id": primary.doc_id,
-        "kind": primary.kind.value,
-        "context_docs": [doc.filename for doc in context],
-        "extractor": extraction.extractor,
-        "sha256": primary.sha256,
-        "charges": len(extraction.charges),
-        "issues": len(issues),
-        "errors": sum(1 for issue in issues if issue.severity == "error"),
-        "operations": _operation_counts(outcome.records),
-        "accounting_entity": entity,
-        "posting_type": posting.posting_type,
-        "ocr_cached": primary.meta.get("ocr_cached"),
-        "warnings": extraction.warnings[:10],
-        "elapsed_s": round(time.perf_counter() - started, 3),
-    }
+    outcome.records = state.records
+    outcome.extras = state.extras
+    outcome.trace = stage_trace(state, elapsed=time.perf_counter() - started)
     return outcome
 
 

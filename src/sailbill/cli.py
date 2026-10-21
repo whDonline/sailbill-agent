@@ -68,6 +68,9 @@ def cmd_run(args: argparse.Namespace) -> int:
         store=store,
         accounting_entity=args.entity,
         use_llm=not args.no_llm and settings.llm_enabled,
+        engine=args.engine,
+        hitl=args.hitl,
+        commit=args.commit,
     )
 
     payload = [
@@ -104,6 +107,18 @@ def cmd_run(args: argparse.Namespace) -> int:
         trace_path.parent.mkdir(parents=True, exist_ok=True)
         trace_path.write_text(
             json.dumps(result.traces, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+
+    if args.save_bills:
+        store.save(args.save_bills)
+        print(f"[sailbill] 账单库已保存到 {args.save_bills}（{len(store)} 张）", file=sys.stderr)
+
+    paused = [t for t in result.traces if t.get("paused_before_commit")]
+    if paused:
+        print(
+            f"[sailbill] {len(paused)} 个单据已在写账前暂停（LangGraph interrupt），"
+            "确认后可 resume 或重新运行并去掉 --hitl",
+            file=sys.stderr,
         )
     return 0
 
@@ -226,6 +241,15 @@ def build_parser() -> argparse.ArgumentParser:
     run_p.add_argument("--extended", action="store_true", help="附加置信度/证据/匹配细节")
     run_p.add_argument("--offline", action="store_true", help="不发起任何网络调用")
     run_p.add_argument("--no-llm", action="store_true", help="只用规则引擎")
+    run_p.add_argument(
+        "--engine",
+        choices=["classic", "langgraph"],
+        default="classic",
+        help="编排引擎：classic 顺序执行，langgraph 走状态机（需 pip install -e '.[graph]'）",
+    )
+    run_p.add_argument("--hitl", action="store_true", help="LangGraph 引擎：在写账前暂停，等待人工确认")
+    run_p.add_argument("--commit", action="store_true", help="把 CREATE/UPDATE 结果写回账单库")
+    run_p.add_argument("--save-bills", default=None, help="配合 --commit，把更新后的账单库另存为文件")
     run_p.add_argument("--quiet", action="store_true", help="不打印 JSON 到标准输出")
     run_p.set_defaults(func=cmd_run)
 

@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Iterator
 
 from ..config import Settings
-from ..models import Attachment, NormalizedDocument, SourceKind
+from ..models import Attachment, NormalizedDocument, SourceKind, sha256_file
 from ..normalize.html import html_to_text
 
 MAX_ATTACHMENTS = 40
@@ -97,8 +97,7 @@ def parse_eml(doc: NormalizedDocument, *, settings: Settings, depth: int = 0) ->
             continue
         safe_name = _safe_name(filename or f"attachment-{count}")
         attachment_dir.mkdir(parents=True, exist_ok=True)
-        target = _unique(attachment_dir / safe_name)
-        target.write_bytes(payload)
+        target = _materialise(attachment_dir, safe_name, payload)
         doc.attachments.append(
             Attachment(
                 filename=safe_name,
@@ -126,6 +125,21 @@ def _safe_name(name: str) -> str:
     keep = "".join(ch for ch in name.replace("\\", "_").replace("/", "_") if ch.isprintable())
     keep = keep.strip() or "attachment"
     return keep[:120]
+
+
+def _materialise(directory: Path, name: str, payload: bytes) -> Path:
+    """Write an attachment once, and reuse it on later runs.
+
+    Using ``_unique`` unconditionally re-copied the same attachment on every run
+    (``name-1.pdf``, ``name-2.pdf``, ...), which grew the cache and, worse, made
+    the *filename* — and therefore the audit trail — non-deterministic.
+    """
+    target = directory / name
+    if target.exists() and sha256_file(target) == hashlib.sha256(payload).hexdigest():
+        return target
+    target = _unique(target)
+    target.write_bytes(payload)
+    return target
 
 
 def _unique(path: Path) -> Path:

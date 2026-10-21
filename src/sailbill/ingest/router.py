@@ -67,17 +67,23 @@ def load_document(
     settings: Settings | None = None,
     depth: int = 0,
     parent_id: Optional[str] = None,
+    display_name: Optional[str] = None,
 ) -> NormalizedDocument:
-    """Parse one file into a NormalizedDocument (no OCR here)."""
+    """Parse one file into a NormalizedDocument (no OCR here).
+
+    ``display_name`` keeps the name a document had *inside the mail* even though
+    it was materialised to a cache path (``debit note.pdf`` rather than
+    ``debit note-3.pdf``), so evidence and the audit trail stay stable.
+    """
     settings = settings or SETTINGS
     p = Path(path)
     if not p.exists():
         raise FileNotFoundError(p)
-    kind = sniff_kind(p)
+    kind = sniff_kind(p, display_name)
     sha = sha256_file(p)
     doc = NormalizedDocument(
         doc_id=stable_doc_id(sha, p.name),
-        filename=p.name,
+        filename=display_name or p.name,
         kind=kind,
         sha256=sha,
         size=p.stat().st_size,
@@ -134,11 +140,14 @@ def load_tree(
     _depth: int = 0,
     _parent: Optional[str] = None,
     _seen: Optional[set[str]] = None,
+    display_name: Optional[str] = None,
 ) -> list[NormalizedDocument]:
     """Parse a file and every EML attachment beneath it (bounded depth)."""
     settings = settings or SETTINGS
     seen = _seen if _seen is not None else set()
-    doc = load_document(path, settings=settings, depth=_depth, parent_id=_parent)
+    doc = load_document(
+        path, settings=settings, depth=_depth, parent_id=_parent, display_name=display_name
+    )
     if doc.sha256 in seen:
         return []
     seen.add(doc.sha256)
@@ -156,6 +165,7 @@ def load_tree(
                         _depth=_depth + 1,
                         _parent=doc.doc_id,
                         _seen=seen,
+                        display_name=att.filename,
                     )
                 )
             except Exception as exc:  # one broken attachment must not kill the run
