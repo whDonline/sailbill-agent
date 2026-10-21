@@ -95,6 +95,12 @@ _QUALIFIERS = {
     "inbound", "outbound", "import", "export", "目的港", "起运港", "卸货港", "装货港", "进口", "出口",
 }
 
+# generic words that must not be used as a single-word prefix match
+_GENERIC_WORDS = {
+    "freight", "collect", "prepaid", "paid", "total", "amount", "charge", "fee",
+    "rate", "cost", "price", "费用", "金额",
+}
+
 
 def _fold(text: str) -> str:
     """Unicode/case/punctuation folding used for every comparison."""
@@ -181,19 +187,24 @@ def standardize_charge(
             return ChargeStandard(standard=index[candidate], raw=text, method="alias", score=0.95)
 
     # longest known prefix: real documents append references and surcharge words,
-    # e.g. "On Carriage Additional - US EmOCA17 USD" is just "On Carriage"
+    # e.g. "On Carriage Additional - US EmOCA17 USD" is just "On Carriage".
+    # A single remaining word is also accepted ("ENS FEE" -> "ENS"), except for
+    # generic words that would swallow the wrong fee ("FREIGHT COLLECT").
     if allow_prefix:
         words = _fold(text).split()
-        for cut in range(len(words) - 1, 1, -1):
+        for cut in range(len(words) - 1, 0, -1):
             candidate = "".join(words[:cut])
-            if candidate in index:
-                return ChargeStandard(
-                    standard=index[candidate],
-                    raw=text,
-                    method="prefix",
-                    score=0.9,
-                    warnings=[f"费用名 {text!r} 含附加描述，按前缀映射为 {index[candidate]!r}"],
-                )
+            if candidate not in index:
+                continue
+            if cut == 1 and candidate in _GENERIC_WORDS:
+                continue
+            return ChargeStandard(
+                standard=index[candidate],
+                raw=text,
+                method="prefix",
+                score=0.9,
+                warnings=[f"费用名 {text!r} 含附加描述，按前缀映射为 {index[candidate]!r}"],
+            )
 
     if len(key) < 4:
         return ChargeStandard(

@@ -222,6 +222,7 @@ sailbill run samples/ --out out/records.json --trace out/trace.json          # �
 sailbill run samples/debit_note.xlsx --extended                              # 附带置信度/证据/匹配细节
 sailbill run samples/ --entity "XYZ Freight Forwarding Ltd"                  # 指定记账主体
 sailbill run samples/ --offline --no-llm                                     # 完全离线、纯规则
+sailbill names samples/                                                      # 费用名：原始写法 → 标准名称
 sailbill ocr samples/debit_note.pdf                                          # 只看 OCR 结构化结果
 sailbill eval --min-score 0.9                                                # 金标评测（CI 门禁）
 python harness/run_eval.py --llm                                             # 含大模型的评测

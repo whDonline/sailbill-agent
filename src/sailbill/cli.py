@@ -18,7 +18,9 @@ from typing import Iterable
 
 from . import __version__
 from .config import SETTINGS, Settings
+from .ingest import load_tree
 from .ingest.ocr import OcrClient, OcrError, find_charges, render_ocr_text
+from .normalize.charges import standardize_charge
 from .output import as_extended, as_json, summarize
 from .pipeline import run_paths
 from .store import BillStore
@@ -106,6 +108,50 @@ def cmd_run(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_names(args: argparse.Namespace) -> int:
+    """题面四.3：原始名称与标准化名称同时保留。这里把两者并排打印出来。"""
+    from .extract import extract_document
+
+    files = _expand(args.files)
+    if not files:
+        print("没有可处理的文件", file=sys.stderr)
+        return 2
+
+    settings = _settings_from_args(args)
+    rows: list[tuple[str, str, str, str, float, str]] = []
+    for path in files:
+        docs = load_tree(path, settings=settings)
+        extraction = extract_document(docs, settings=settings, use_llm=False)
+        for charge in extraction.charges:
+            rows.append(
+                (
+                    path.name,
+                    charge.charge_item_raw or "",
+                    charge.charge_item or "",
+                    standardize_charge(charge.charge_item_raw or "").method,
+                    standardize_charge(charge.charge_item_raw or "").score,
+                    charge.amount if charge.amount is not None else 0.0,
+                )
+            )
+
+    if not rows:
+        print("未提取到费用行", file=sys.stderr)
+        return 1
+
+    print(f"{'来源文件':24} {'原始名称':34} {'标准名称':28} {'方式':8} {'分数':5} {'金额':>9}")
+    print("-" * 116)
+    for name, raw, standard, method, score, amount in rows:
+        flag = "" if method in {"exact", "alias"} else " ⚠"
+        print(
+            f"{name[:24]:24} {raw[:34]:34} {standard[:28]:28} {method:8} {score:5.2f} {amount:>9,.2f}{flag}"
+        )
+    changed = sum(1 for row in rows if row[1].strip().lower() != row[2].strip().lower())
+    review = sum(1 for row in rows if row[3] not in {"exact", "alias"})
+    print("-" * 116)
+    print(f"共 {len(rows)} 条费用；被重命名 {changed} 条；需人工确认 {review} 条")
+    return 0
+
+
 def cmd_ocr(args: argparse.Namespace) -> int:
     client = OcrClient(SETTINGS)
     try:
@@ -182,6 +228,11 @@ def build_parser() -> argparse.ArgumentParser:
     run_p.add_argument("--no-llm", action="store_true", help="只用规则引擎")
     run_p.add_argument("--quiet", action="store_true", help="不打印 JSON 到标准输出")
     run_p.set_defaults(func=cmd_run)
+
+    names_p = sub.add_parser("names", help="展示费用名称的原始写法与标准化结果（题面四.3）")
+    names_p.add_argument("files", nargs="+", help="文件或目录")
+    names_p.add_argument("--offline", action="store_true", help="不发起任何网络调用")
+    names_p.set_defaults(func=cmd_names)
 
     ocr_p = sub.add_parser("ocr", help="单独调用 OCR 服务并查看结构化结果")
     ocr_p.add_argument("source", help="本地文件或公开 URL")

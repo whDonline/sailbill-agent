@@ -99,3 +99,39 @@ class Tri(Generic[T]):
 | OCR 需要公网 URL 但没有投递方式 | 明确报错并给出四种解决方案（`OcrDeliveryError`） |
 | 单个附件解析失败 | 捕获后记 warning，不影响同批其他文件 |
 | Excel 旧版 `.xls` | 提示安装 `xlrd` 或先转换，不静默失败 |
+| Outlook `.msg` | 走 `extract-msg`；未安装该可选依赖时明确提示，不误当作 EML |
+
+## 9. 费用名称标准化（题面四.3）
+
+**目标**：把 `Handling Fee` / `H/D Fee` / `操作费` / `THC (DEST)` 归一，同时**保留原始写法**。
+
+**词典**：`normalize/charges.py::STANDARD_CHARGES` —— 36 个标准费用项、约 180 条别名（英/中/缩写），
+覆盖题面要求的 6 组，并扩展到 BAF/CAF/PSS/GRI/ISPS/AMS/ENS/VGM/D·O/电放/查验/滞箱/燃油等常见项。
+词典是**数据**：新增客户写法只需加一行别名，不用改逻辑。
+
+**匹配链**（命中即返回，`method` 决定置信度）：
+
+| 顺序 | 规则 | method | 例 |
+| --- | --- | --- | --- |
+| 1 | 精确（归一化后完全相同） | `exact` | `Ocean Freight` |
+| 2 | 别名表（中英、缩写、`&` 与标点折叠） | `alias` | `H/D Fee` → Handling Charge |
+| 3 | 去括号再匹配 | `alias` | `THC (DEST)` → THC |
+| 4 | 按 `-`/`–`/`/` 取前半段 | `alias` | `FREIGHT - 40HQ` |
+| 5 | 剥限定词（DEST/ORIGIN/目的港…） | `alias` | `THC DESTINATION` |
+| 6 | **最长已知前缀**（可退到 1 个词，通用词除外） | `prefix` | `ENS FEE` → ENS、`AMS 申报费` → AMS |
+| 7 | 模糊（≥0.88，且长度差受限） | `fuzzy` | `Terminal Handing Charge` |
+| 8 | 都不中 | `unmapped` | 保留原名 + `needs_review` |
+
+`prefix` / `fuzzy` / `unmapped` 都会扣置信度（`validate/confidence.py`），必要时转 `PENDING_REVIEW`。
+`unmapped` **保留原名**而不是丢弃或强映射——静默改名会污染台账。
+
+**"同时保存"落在四处**：
+
+1. `ChargeExtraction.charge_item_raw` / `.charge_item` —— 抽取层并行保存；
+2. `BillLine.charge_item_raw` / `.charge_item` —— 账单库（幂等键用标准名，展示用原名）；
+3. 默认输出 `charge_details.charge_item` —— 只放标准名（题面第五节契约）；
+4. `--extended` 的 `_trace.charge_item_raw` —— 原始写法随记录输出，供审计与人工核对。
+
+> 契约取舍：题面输出 schema 的 `charge_details` 只有一个名称字段，所以默认输出只给标准名，
+> 原名走扩展通道。这样既不破坏下游 schema，又满足"系统应同时保存"。
+> `sailbill names <files>` 可以把两列并排打出来。

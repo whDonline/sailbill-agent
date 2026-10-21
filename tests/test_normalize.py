@@ -155,3 +155,38 @@ def test_plain_company_name_is_not_truncated():
 def test_normalize_party_name_strips_legal_suffix():
     # legal suffixes go, industry words stay (they distinguish companies)
     assert normalize_party_name("Shanghai Xinda Logistics Co., Ltd") == "shanghai xinda logistics"
+
+
+# --------------------------------------------------------------------------- #
+# charge names: both the raw and the standardised name are kept
+# --------------------------------------------------------------------------- #
+def test_ens_fee_maps_through_single_word_prefix():
+    result = standardize_charge("ENS FEE")
+    assert result.standard == "ENS"
+    assert result.method == "prefix"
+
+
+def test_chinese_suffix_after_abbreviation():
+    result = standardize_charge("AMS 申报费")
+    assert result.standard == "AMS"
+
+
+def test_generic_word_is_not_used_as_prefix():
+    """"FREIGHT COLLECT" is a term, not the Ocean Freight charge."""
+    result = standardize_charge("FREIGHT COLLECT")
+    assert result.standard != "Ocean Freight"
+    assert result.method == "unmapped"
+
+
+def test_raw_and_standard_name_are_both_present():
+    from sailbill.extract.rules import extract_rules
+    from sailbill.models import NormalizedDocument, SourceKind
+
+    doc = NormalizedDocument(
+        doc_id="doc-names", filename="names.txt", kind=SourceKind.TEXT, sha256="x" * 64
+    )
+    doc.add_block("H/D Fee   2   20.00   40.00   USD   PP", kind="paragraph", line=0)
+    extraction = extract_rules([doc])
+    charge = extraction.charges[0]
+    assert charge.charge_item_raw == "H/D Fee"          # 原始写法保留
+    assert charge.charge_item == "Handling Charge"      # 标准化名称
