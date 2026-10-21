@@ -14,8 +14,7 @@ from pathlib import Path
 from typing import Any, Iterable, Optional
 
 from .config import SETTINGS, Settings
-from .extract import extract_document
-from .finance import PostingDecision, determine_posting
+from .finance import PostingDecision
 from .ingest import load_tree
 from .matching import MatchOutcome, match_charge
 from .models import (
@@ -32,7 +31,7 @@ from .normalize.dates import format_date
 from .normalize.parties import PartyResolver
 from .output import build_record, summarize
 from .store import BillStore
-from .validate import has_blocking_issue, score_charge, validate_extraction
+from .validate import has_blocking_issue
 
 MAX_REASONING = 10
 
