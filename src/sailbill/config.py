@@ -82,7 +82,7 @@ class Settings:
         return bool(self.ocr_endpoint) and self.file_delivery != "none" and not self.offline
 
     @classmethod
-    def load(cls) -> "Settings":
+    def load(cls) -> Settings:
         return cls(
             llm_provider=_env("SAILBILL_LLM_PROVIDER", "deepseek"),
             llm_model=_env("SAILBILL_LLM_MODEL", "deepseek-chat"),

@@ -21,10 +21,10 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date, datetime
 from enum import Enum
-from typing import Any, Generic, Literal, Optional, TypeVar
+from typing import Any, Generic, Literal, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -44,20 +44,20 @@ class Status(str, Enum):
 class Tri(Generic[T]):
     """A field that knows *why* it has no value."""
 
-    value: Optional[T] = None
+    value: T | None = None
     status: Status = Status.UNKNOWN
-    evidence: Optional[str] = None
+    evidence: str | None = None
 
     @classmethod
-    def present(cls, value: T, evidence: Optional[str] = None) -> "Tri[T]":
+    def present(cls, value: T, evidence: str | None = None) -> Tri[T]:
         return cls(value=value, status=Status.PRESENT, evidence=evidence)
 
     @classmethod
-    def absent(cls, evidence: Optional[str] = None) -> "Tri[T]":
+    def absent(cls, evidence: str | None = None) -> Tri[T]:
         return cls(value=None, status=Status.ABSENT, evidence=evidence)
 
     @classmethod
-    def unknown(cls, evidence: Optional[str] = None) -> "Tri[T]":
+    def unknown(cls, evidence: str | None = None) -> Tri[T]:
         return cls(value=None, status=Status.UNKNOWN, evidence=evidence)
 
     @property
@@ -97,12 +97,12 @@ class Block(BaseModel):
 
     text: str
     kind: Literal["heading", "paragraph", "kv", "table_cell", "ocr", "mail_header"] = "paragraph"
-    page: Optional[int] = None
-    line: Optional[int] = None
-    table_id: Optional[str] = None
-    row: Optional[int] = None
-    col: Optional[int] = None
-    source: Optional[str] = None  # file name the block came from (attachments)
+    page: int | None = None
+    line: int | None = None
+    table_id: str | None = None
+    row: int | None = None
+    col: int | None = None
+    source: str | None = None  # file name the block came from (attachments)
 
 
 class TableData(BaseModel):
@@ -111,11 +111,11 @@ class TableData(BaseModel):
     table_id: str
     headers: list[str] = Field(default_factory=list)
     rows: list[list[str]] = Field(default_factory=list)
-    header_row: Optional[int] = None
-    page: Optional[int] = None
-    title: Optional[str] = None
-    source: Optional[str] = None
-    sheet: Optional[str] = None
+    header_row: int | None = None
+    page: int | None = None
+    title: str | None = None
+    source: str | None = None
+    sheet: str | None = None
 
 
 class Attachment(BaseModel):
@@ -125,7 +125,7 @@ class Attachment(BaseModel):
     sha256: str
     size: int
     kind: SourceKind = SourceKind.UNKNOWN
-    path: Optional[str] = None  # materialised path for recursive parsing
+    path: str | None = None  # materialised path for recursive parsing
     depth: int = 0
 
 
@@ -145,8 +145,8 @@ class NormalizedDocument(BaseModel):
     meta: dict[str, Any] = Field(default_factory=dict)
     attachments: list[Attachment] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
-    ocr: Optional[dict[str, Any]] = None
-    path: Optional[str] = None
+    ocr: dict[str, Any] | None = None
+    path: str | None = None
 
     def add_block(self, text: str, **kw: Any) -> None:
         if text is None:
@@ -173,17 +173,17 @@ class ChargeExtraction(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    charge_item_raw: Optional[str] = None
-    charge_item: Optional[str] = None  # standardised name
-    description: Optional[str] = None
-    quantity: Optional[float] = None
-    unit_price: Optional[float] = None
-    amount: Optional[float] = None
-    currency: Optional[str] = None
-    payment_term: Optional[str] = None
-    evidence: Optional[str] = None
-    page: Optional[int] = None
-    source_row: Optional[int] = None
+    charge_item_raw: str | None = None
+    charge_item: str | None = None  # standardised name
+    description: str | None = None
+    quantity: float | None = None
+    unit_price: float | None = None
+    amount: float | None = None
+    currency: str | None = None
+    payment_term: str | None = None
+    evidence: str | None = None
+    page: int | None = None
+    source_row: int | None = None
 
 
 class DocExtraction(BaseModel):
@@ -229,12 +229,12 @@ class BillLine(BaseModel):
 
     line_id: str
     charge_item: str
-    charge_item_raw: Optional[str] = None
+    charge_item_raw: str | None = None
     amount: float
     currency: str
-    payment_term: Optional[str] = None
-    quantity: Optional[float] = None
-    unit_price: Optional[float] = None
+    payment_term: str | None = None
+    quantity: float | None = None
+    unit_price: float | None = None
 
 
 class Bill(BaseModel):
@@ -243,21 +243,21 @@ class Bill(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     bill_id: str
-    document_type: Optional[str] = None
-    reference_no: Optional[str] = None
-    document_date: Optional[str] = None
-    issuer: Optional[str] = None
-    recipient: Optional[str] = None
-    accounting_entity: Optional[str] = None
-    posting_type: Optional[Literal["AR", "AP"]] = None
-    currency: Optional[str] = None
+    document_type: str | None = None
+    reference_no: str | None = None
+    document_date: str | None = None
+    issuer: str | None = None
+    recipient: str | None = None
+    accounting_entity: str | None = None
+    posting_type: Literal["AR", "AP"] | None = None
+    currency: str | None = None
     references: dict[str, list[str]] = Field(default_factory=dict)
     lines: list[BillLine] = Field(default_factory=list)
-    source: Optional[str] = None
+    source: str | None = None
 
     # ---- flexible construction -------------------------------------------------
     @classmethod
-    def from_any(cls, payload: dict[str, Any], *, index: int = 0, source: str | None = None) -> "Bill":
+    def from_any(cls, payload: dict[str, Any], *, index: int = 0, source: str | None = None) -> Bill:
         """Accept our own schema, the assignment's output schema, or a loose bill.
 
         The assignment hands over "existing bills" as JSON whose exact shape is
@@ -281,10 +281,7 @@ class Bill(BaseModel):
                     return cur
             return default
 
-        doc_info = p.get("document_info") if isinstance(p.get("document_info"), dict) else {}
-        party = p.get("transaction_party") if isinstance(p.get("transaction_party"), dict) else {}
         charge = p.get("charge_details") if isinstance(p.get("charge_details"), dict) else {}
-        fin = p.get("financial_attributes") if isinstance(p.get("financial_attributes"), dict) else {}
 
         reference_no = pick("reference_no", "document_info.reference_no", "doc_no", "bill_no")
         bill_id = pick("bill_id", "id") or f"bill-{index:04d}"
@@ -349,7 +346,7 @@ class Bill(BaseModel):
         return f"{self.bill_id}"
 
 
-def _f(v: Any) -> Optional[float]:
+def _f(v: Any) -> float | None:
     if v is None or v == "":
         return None
     try:
@@ -358,11 +355,11 @@ def _f(v: Any) -> Optional[float]:
         return None
 
 
-def _s(v: Any) -> Optional[str]:
+def _s(v: Any) -> str | None:
     return None if v is None else str(v)
 
 
-def _posting(v: Any) -> Optional[Literal["AR", "AP"]]:
+def _posting(v: Any) -> Literal["AR", "AP"] | None:
     if isinstance(v, str) and v.strip().upper() in {"AR", "AP"}:
         return v.strip().upper()  # type: ignore[return-value]
     return None
@@ -382,8 +379,8 @@ class MatchResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     bill: Bill
-    line: Optional[BillLine] = None
-    rule: Optional[MatchRule] = None
+    line: BillLine | None = None
+    rule: MatchRule | None = None
     score: float = 0.0
     reasons: list[str] = Field(default_factory=list)
 
@@ -401,7 +398,7 @@ class Issue(BaseModel):
     code: str
     message: str
     severity: Literal["info", "warn", "error"] = "warn"
-    field: Optional[str] = None
+    field: str | None = None
 
 
 class Decision(BaseModel):
@@ -411,7 +408,7 @@ class Decision(BaseModel):
     confidence: float = 0.0
     reasons: list[str] = Field(default_factory=list)
     issues: list[Issue] = Field(default_factory=list)
-    match: Optional[MatchResult] = None
+    match: MatchResult | None = None
     changed_fields: list[str] = Field(default_factory=list)
 
 
@@ -421,32 +418,32 @@ class Decision(BaseModel):
 class DocumentInfo(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    document_type: Optional[str] = None
-    reference_no: Optional[str] = None
-    document_date: Optional[str] = None
+    document_type: str | None = None
+    reference_no: str | None = None
+    document_date: str | None = None
 
 
 class TransactionParty(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    issuer: Optional[str] = None
-    recipient: Optional[str] = None
+    issuer: str | None = None
+    recipient: str | None = None
 
 
 class ChargeDetails(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    charge_item: Optional[str] = None
-    amount: Optional[float] = None
-    currency: Optional[str] = None
-    payment_term: Optional[str] = None
+    charge_item: str | None = None
+    amount: float | None = None
+    currency: str | None = None
+    payment_term: str | None = None
 
 
 class FinancialAttributes(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    accounting_entity: Optional[str] = None
-    posting_type: Optional[Literal["AR", "AP"]] = None
+    accounting_entity: str | None = None
+    posting_type: Literal["AR", "AP"] | None = None
 
 
 class AuditTrail(BaseModel):

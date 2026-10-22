@@ -9,8 +9,8 @@ project is fully usable without any API key, which matters for reviewers.
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from datetime import date
-from typing import Iterable, Optional
 
 from ..models import ChargeExtraction, DocExtraction, NormalizedDocument, Tri
 from ..normalize.amounts import parse_amount, round2
@@ -38,7 +38,7 @@ def _lines(text: str) -> list[str]:
     return [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
 
 
-def _first_line_with(lines: Iterable[str], needle: str) -> Optional[str]:
+def _first_line_with(lines: Iterable[str], needle: str) -> str | None:
     n = needle.lower()
     for line in lines:
         if n in line.lower():
@@ -71,9 +71,9 @@ def labeled_value(
     text: str,
     labels: Iterable[str],
     *,
-    valid: Optional[re.Pattern[str]] = None,
+    valid: re.Pattern[str] | None = None,
     strict_only: bool = False,
-) -> tuple[Optional[str], Optional[str], bool]:
+) -> tuple[str | None, str | None, bool]:
     """Find ``label: value``; returns (value, evidence, label_seen).
 
     Two passes: line-start labels first (high precision), then inline labels
@@ -98,9 +98,9 @@ def labeled_value(
     return None, None, False
 
 
-def amount_in_line(line: str) -> Optional[float]:
+def amount_in_line(line: str) -> float | None:
     """Rightmost parseable number in a line (charge amounts are right aligned)."""
-    best: Optional[float] = None
+    best: float | None = None
     for m in _NUM_TOKEN.finditer(line):
         parsed = parse_amount(m.group(0))
         if parsed.ok:
@@ -108,7 +108,7 @@ def amount_in_line(line: str) -> Optional[float]:
     return best
 
 
-def first_amount_in_line(line: str, *, after: int = 0) -> Optional[float]:
+def first_amount_in_line(line: str, *, after: int = 0) -> float | None:
     """Leftmost parseable number after ``after`` (totals: "TOTAL 1,410.40 0")."""
     for m in _NUM_TOKEN.finditer(line, after):
         parsed = parse_amount(m.group(0))
@@ -117,7 +117,7 @@ def first_amount_in_line(line: str, *, after: int = 0) -> Optional[float]:
     return None
 
 
-def first_money_in_line(line: str, *, after: int = 0) -> Optional[float]:
+def first_money_in_line(line: str, *, after: int = 0) -> float | None:
     """Leftmost *money-shaped* number ("VAT (10%): 100.00" -> 100.00, not 10)."""
     for m in _MONEY_TOKEN.finditer(line, after):
         parsed = parse_amount(m.group(0))
@@ -126,7 +126,7 @@ def first_money_in_line(line: str, *, after: int = 0) -> Optional[float]:
     return first_amount_in_line(line, after=after)
 
 
-def detect_doc_type(text: str) -> tuple[Optional[str], Optional[str]]:
+def detect_doc_type(text: str) -> tuple[str | None, str | None]:
     """Document type from the *title area* first, then the whole document."""
     head = "\n".join(_lines(text)[:12])
     for region in (head, text):
@@ -153,7 +153,7 @@ def detect_doc_type(text: str) -> tuple[Optional[str], Optional[str]]:
     return None, None
 
 
-def _pick_currency(text: str) -> tuple[Optional[str], Optional[str], bool]:
+def _pick_currency(text: str) -> tuple[str | None, str | None, bool]:
     """Most likely invoice currency.
 
     A bare three-letter token is *not* enough: ``ALL``, ``COD``, ``THE`` and
@@ -210,12 +210,12 @@ _COMMON_FREIGHT_CURRENCIES = {
 }
 
 
-def _totals(text: str, currency: Optional[str]) -> dict[str, tuple[Optional[float], Optional[str], bool]]:
-    out: dict[str, tuple[Optional[float], Optional[str], bool]] = {}
+def _totals(text: str, currency: str | None) -> dict[str, tuple[float | None, str | None, bool]]:
+    out: dict[str, tuple[float | None, str | None, bool]] = {}
     lines = _lines(text)
     for field, labels in lexicon.TOTAL_LABELS.items():
-        hit_value: Optional[float] = None
-        hit_line: Optional[str] = None
+        hit_value: float | None = None
+        hit_line: str | None = None
         seen = False
         for label in labels:
             pattern = re.compile(rf"(?<![A-Za-z]){_label_regex(label)}(?![A-Za-z])", re.IGNORECASE)
@@ -290,7 +290,7 @@ _CCY_INLINE = re.compile(
 )
 
 
-def _split_by_currency(line: str) -> tuple[Optional[str], Optional[str], Optional[str]]:
+def _split_by_currency(line: str) -> tuple[str | None, str | None, str | None]:
     """``On Carriage Additional - US EmOCA17 USD  245.0000`` -> (name, rest, USD).
 
     Splitting on the last currency token is far more reliable than splitting on
@@ -315,7 +315,7 @@ def _numbers_in(text: str) -> list[float]:
     return out
 
 
-def _infer_qty_unit(text: str, amount: Optional[float]) -> tuple[Optional[float], Optional[float]]:
+def _infer_qty_unit(text: str, amount: float | None) -> tuple[float | None, float | None]:
     """Recover 数量/单价 when they are printed next to the amount.
 
     Only accepted when the arithmetic actually closes (qty × unit == amount),
@@ -334,7 +334,7 @@ def _infer_qty_unit(text: str, amount: Optional[float]) -> tuple[Optional[float]
     return None, None
 
 
-def _parse_pipe_row(line: str, *, doc_currency: Optional[str]) -> Optional[ChargeExtraction]:
+def _parse_pipe_row(line: str, *, doc_currency: str | None) -> ChargeExtraction | None:
     """A row that became ``a | b | c`` (HTML mail table, docx-less text)."""
     cells = [cell.strip() for cell in line.split("|")]
     cells = [cell for cell in cells if cell]
@@ -345,8 +345,8 @@ def _parse_pipe_row(line: str, *, doc_currency: Optional[str]) -> Optional[Charg
         return None
 
     std = standardize_charge(name)
-    currency: Optional[str] = None
-    term: Optional[str] = None
+    currency: str | None = None
+    term: str | None = None
     numbers: list[float] = []
     for cell in cells[1:]:
         if re.fullmatch(r"[A-Za-z]{3}", cell):
@@ -359,9 +359,9 @@ def _parse_pipe_row(line: str, *, doc_currency: Optional[str]) -> Optional[Charg
         if parsed.ok and parsed.value is not None:
             numbers.append(parsed.value)
 
-    amount: Optional[float] = None
-    qty: Optional[float] = None
-    unit: Optional[float] = None
+    amount: float | None = None
+    qty: float | None = None
+    unit: float | None = None
     if len(numbers) >= 3:
         amount = numbers[-1]
         if abs(numbers[-3] * numbers[-2] - amount) <= 0.01:
@@ -392,8 +392,8 @@ def _parse_pipe_row(line: str, *, doc_currency: Optional[str]) -> Optional[Charg
 def charges_from_text(
     text: str,
     *,
-    doc_currency: Optional[str],
-    warnings: Optional[list[str]] = None,
+    doc_currency: str | None,
+    warnings: list[str] | None = None,
 ) -> list[ChargeExtraction]:
     """Last-resort parser for fee rows that survive only as text lines.
 
@@ -489,7 +489,7 @@ def charges_from_text(
 
 
 def _dedupe_charges(charges: list[ChargeExtraction]) -> tuple[list[ChargeExtraction], list[str]]:
-    seen: dict[tuple[str, float, Optional[str]], ChargeExtraction] = {}
+    seen: dict[tuple[str, float, str | None], ChargeExtraction] = {}
     warnings: list[str] = []
     for charge in charges:
         key = (str(charge.charge_item), float(charge.amount or 0.0), charge.currency)
@@ -505,7 +505,7 @@ def _dedupe_charges(charges: list[ChargeExtraction]) -> tuple[list[ChargeExtract
 def _supplement_from_text(
     charges: list[ChargeExtraction],
     primary_text: str,
-    doc_currency: Optional[str],
+    doc_currency: str | None,
     result: DocExtraction,
 ) -> list[ChargeExtraction]:
     """Use text lines to fill gaps when a table extraction is only partial.
@@ -600,7 +600,7 @@ def extract_rules(
         text, ["date", "dated", "invoice date", "issue date", "document date", "日期", "开票日期"],
         valid=re.compile(r"[0-9A-Za-z]"),
     )
-    parsed_date: Optional[date] = parse_date(value) if value else None
+    parsed_date: date | None = parse_date(value) if value else None
     if parsed_date is None:
         for line in _lines(text)[:40]:
             d = parse_date(line)
@@ -754,7 +754,7 @@ def _bad_reference(value: str) -> bool:
     return bool(re.fullmatch(r"[A-Za-z/.\- ]+", text) and len(text) < 8)
 
 
-def _party_from_headers_or_labels(headers: dict, text: str, *, role: str) -> tuple[Optional[str], Optional[str]]:
+def _party_from_headers_or_labels(headers: dict, text: str, *, role: str) -> tuple[str | None, str | None]:
     """Document labels win over mail headers.
 
     A bill's own "Issued By"/"Bill To" is authoritative; the envelope From/To is
@@ -805,7 +805,7 @@ _HEADER_TOKENS = re.compile(
 )
 
 
-def _looks_like_table_header(evidence: Optional[str]) -> bool:
+def _looks_like_table_header(evidence: str | None) -> bool:
     """Arrival notices put ``SHIPPER NOTIFY | CONSIGNEE`` in a header row.
 
     Taking the cell after such a header yields company names that belong to a
@@ -840,7 +840,7 @@ def _display_name(raw: str) -> str:
     return text
 
 
-def _resolve_party(raw: Optional[str], evidence: Optional[str], resolver: PartyResolver) -> Tri[str]:
+def _resolve_party(raw: str | None, evidence: str | None, resolver: PartyResolver) -> Tri[str]:
     if not raw:
         return Tri.unknown("未找到交易方信息")
     cleaned = _display_name(raw)

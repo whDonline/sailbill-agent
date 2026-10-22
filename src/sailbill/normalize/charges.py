@@ -15,9 +15,9 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
-from typing import Iterable, Optional
 
 # canonical name -> accepted spellings (matched after normalisation)
 STANDARD_CHARGES: dict[str, list[str]] = {
@@ -116,7 +116,7 @@ def _compact(text: str) -> str:
 
 @dataclass
 class ChargeStandard:
-    standard: Optional[str]
+    standard: str | None
     raw: str
     method: str = "none"  # exact | alias | fuzzy | unmapped
     score: float = 0.0

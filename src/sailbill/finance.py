@@ -11,7 +11,7 @@ money that is not owed.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Literal, Optional
+from typing import Literal
 
 from .models import DocExtraction
 from .normalize.parties import PartyResolver
@@ -21,8 +21,8 @@ PostingType = Literal["AR", "AP"]
 
 @dataclass
 class PostingDecision:
-    accounting_entity: Optional[str]
-    posting_type: Optional[PostingType] = None
+    accounting_entity: str | None
+    posting_type: PostingType | None = None
     direction: int = 1  # +1 debit the side, -1 credit (credit note)
     confidence: float = 0.0
     reasons: list[str] = field(default_factory=list)
@@ -35,7 +35,7 @@ class PostingDecision:
 def determine_posting(
     ext: DocExtraction,
     *,
-    accounting_entity: Optional[str],
+    accounting_entity: str | None,
     resolver: PartyResolver | None = None,
 ) -> PostingDecision:
     resolver = resolver or PartyResolver()

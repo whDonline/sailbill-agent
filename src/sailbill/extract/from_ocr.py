@@ -11,7 +11,7 @@ Keeping it here (not in ``ingest``) means the ingester stays a pure parser.
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from ..ingest.ocr import find_charges
 from ..models import ChargeExtraction
@@ -21,7 +21,7 @@ from ..normalize.currency import normalize_currency
 from ..normalize.payment import normalize_payment_term
 
 
-def charges_from_ocr(payload: Any, *, doc_currency: Optional[str] = None) -> list[ChargeExtraction]:
+def charges_from_ocr(payload: Any, *, doc_currency: str | None = None) -> list[ChargeExtraction]:
     out: list[ChargeExtraction] = []
     for row in find_charges(payload):
         raw_name = row.get("charge_item_raw") or row.get("description")
@@ -59,7 +59,7 @@ def charges_from_ocr(payload: Any, *, doc_currency: Optional[str] = None) -> lis
     return out
 
 
-def _evidence(row: dict[str, Any]) -> Optional[str]:
+def _evidence(row: dict[str, Any]) -> str | None:
     parts = [
         f"{key}={row.get(key)}"
         for key in ("charge_item_raw", "quantity", "unit_price", "amount", "currency", "payment_term")

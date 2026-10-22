@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Optional
 
 PREPAID = "PP"
 COLLECT = "CC"
@@ -39,7 +38,7 @@ _FOLD = re.compile(r"[^0-9a-z\u4e00-\u9fff/()]+")
 
 @dataclass
 class PaymentTerm:
-    term: Optional[str]
+    term: str | None
     raw: str = ""
     score: float = 0.0
     warnings: list[str] = field(default_factory=list)

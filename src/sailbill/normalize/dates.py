@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 from datetime import date, datetime
 from email.utils import parsedate_to_datetime
-from typing import Optional
 
 _MONTHS = {
     "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
@@ -22,7 +21,7 @@ _PATTERNS: list[tuple[re.Pattern[str], str]] = [
 ]
 
 
-def parse_date(raw: object, *, default_year: int | None = None) -> Optional[date]:
+def parse_date(raw: object, *, default_year: int | None = None) -> date | None:
     """Best-effort, but *strict*: an unparseable string yields ``None``."""
     if raw is None:
         return None
@@ -76,9 +75,9 @@ def parse_date(raw: object, *, default_year: int | None = None) -> Optional[date
         return None
 
 
-def _month(token: str) -> Optional[int]:
+def _month(token: str) -> int | None:
     return _MONTHS.get(token.strip().lower()[:4]) or _MONTHS.get(token.strip().lower()[:3])
 
 
-def format_date(d: Optional[date]) -> Optional[str]:
+def format_date(d: date | None) -> str | None:
     return d.isoformat() if d else None

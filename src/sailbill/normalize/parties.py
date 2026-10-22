@@ -14,10 +14,11 @@ from __future__ import annotations
 import json
 import re
 import unicodedata
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 # role-style parties that appear in the assignment's sample output
 DEFAULT_ALIASES: dict[str, list[str]] = {
@@ -111,7 +112,7 @@ class PartyResolver:
 
     # -- construction -----------------------------------------------------
     @classmethod
-    def from_file(cls, path: str | Path) -> "PartyResolver":
+    def from_file(cls, path: str | Path) -> PartyResolver:
         p = Path(path)
         if not p.exists():
             return cls()

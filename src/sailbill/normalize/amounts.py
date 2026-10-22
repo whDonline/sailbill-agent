@@ -11,7 +11,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
-from typing import Optional
 
 _FULLWIDTH = str.maketrans("０１２３４５６７８９，．－＋￥＄　", "0123456789,.-+¥$ ")
 
@@ -50,11 +49,11 @@ _CURRENCY_TOKEN = re.compile(
 class AmountParse:
     """Result of parsing a money cell."""
 
-    value: Optional[float]
+    value: float | None
     raw: str = ""
     negative: bool = False
     repaired: bool = False
-    currency_hint: Optional[str] = None
+    currency_hint: str | None = None
     warnings: list[str] = field(default_factory=list)
 
     @property
@@ -62,7 +61,7 @@ class AmountParse:
         return self.value is not None
 
 
-def to_decimal(text: str) -> tuple[Optional[Decimal], bool, list[str]]:
+def to_decimal(text: str) -> tuple[Decimal | None, bool, list[str]]:
     """Parse one number, tolerating locale separators.
 
     Returns ``(value, negative, warnings)``.
@@ -136,7 +135,7 @@ def parse_amount(
         return AmountParse(value=None, raw=text, warnings=["空值"])
 
     warnings: list[str] = []
-    hint: Optional[str] = None
+    hint: str | None = None
     m = _CURRENCY_TOKEN.search(text)
     if m:
         hint = m.group("code").upper()
@@ -164,7 +163,7 @@ def parse_amount(
         if not _has_currency_context(text):
             return AmountParse(value=None, raw=text, warnings=["疑似文字描述中的序号，未按金额处理"])
 
-    value: Optional[Decimal] = None
+    value: Decimal | None = None
     negative = False
     repaired = False
 
@@ -214,7 +213,7 @@ def _has_currency_context(text: str) -> bool:
     return bool(_CURRENCY_TOKEN.search(text)) or bool(_alphabetic_currency(text))
 
 
-def _alphabetic_currency(text: str) -> Optional[str]:
+def _alphabetic_currency(text: str) -> str | None:
     """Detect a leading/trailing currency word such as ``USD`` or ``RMB``."""
     upper = re.sub(r"[^A-Z]", "", text.upper())
     for code in ("USD", "CNY", "RMB", "HKD", "EUR", "GBP", "JPY", "SGD", "AUD", "CAD", "THB", "MYR"):

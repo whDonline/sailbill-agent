@@ -10,7 +10,6 @@ from __future__ import annotations
 import inspect
 from dataclasses import replace
 
-from sailbill.config import SETTINGS
 from sailbill.output import as_json
 from sailbill.pipeline import run_paths
 from sailbill.store import BillStore

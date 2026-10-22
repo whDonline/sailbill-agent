@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import mimetypes
 from pathlib import Path
-from typing import Optional
 
 from ..config import SETTINGS, Settings
 from ..models import NormalizedDocument, SourceKind, sha256_file, stable_doc_id
@@ -66,8 +65,8 @@ def load_document(
     *,
     settings: Settings | None = None,
     depth: int = 0,
-    parent_id: Optional[str] = None,
-    display_name: Optional[str] = None,
+    parent_id: str | None = None,
+    display_name: str | None = None,
 ) -> NormalizedDocument:
     """Parse one file into a NormalizedDocument (no OCR here).
 
@@ -138,9 +137,9 @@ def load_tree(
     *,
     settings: Settings | None = None,
     _depth: int = 0,
-    _parent: Optional[str] = None,
-    _seen: Optional[set[str]] = None,
-    display_name: Optional[str] = None,
+    _parent: str | None = None,
+    _seen: set[str] | None = None,
+    display_name: str | None = None,
 ) -> list[NormalizedDocument]:
     """Parse a file and every EML attachment beneath it (bounded depth)."""
     settings = settings or SETTINGS

@@ -13,7 +13,6 @@ from pathlib import Path
 from ..models import NormalizedDocument, TableData
 from .excel import guess_header_row
 
-
 MAX_PAGES = 30
 # below this many characters per page a PDF is treated as a scan
 OCR_TEXT_THRESHOLD = 60

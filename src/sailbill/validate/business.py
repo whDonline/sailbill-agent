@@ -8,8 +8,8 @@ cheap to unit test and impossible to "prompt away".
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import date, timedelta
-from typing import Iterable
 
 from ..config import SETTINGS, Settings
 from ..models import DocExtraction, Issue
@@ -134,7 +134,7 @@ def validate_extraction(ext: DocExtraction, *, settings: Settings | None = None)
             seen[key] = i
 
     # ---- charge name standardisation ------------------------------------
-    for i, charge in enumerate(ext.charges):
+    for charge in ext.charges:
         std = standardize_charge(charge.charge_item_raw or charge.charge_item)
         if std.method == "unmapped":
             issues.append(

@@ -18,7 +18,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -35,34 +35,34 @@ from . import prompts
 class LLMCharge(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
-    charge_item_raw: Optional[str] = None
-    description: Optional[str] = None
-    quantity: Optional[float] = None
-    unit_price: Optional[float] = None
-    amount: Optional[float] = None
-    currency: Optional[str] = None
-    payment_term: Optional[str] = None
-    evidence: Optional[str] = None
+    charge_item_raw: str | None = None
+    description: str | None = None
+    quantity: float | None = None
+    unit_price: float | None = None
+    amount: float | None = None
+    currency: str | None = None
+    payment_term: str | None = None
+    evidence: str | None = None
 
 
 class LLMDoc(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
-    document_type: Optional[str] = None
-    reference_no: Optional[str] = None
-    document_date: Optional[str] = None
-    issuer: Optional[str] = None
-    recipient: Optional[str] = None
-    currency: Optional[str] = None
-    subtotal_amount: Optional[float] = None
-    tax_amount: Optional[float] = None
-    total_amount: Optional[float] = None
-    payment_term: Optional[str] = None
+    document_type: str | None = None
+    reference_no: str | None = None
+    document_date: str | None = None
+    issuer: str | None = None
+    recipient: str | None = None
+    currency: str | None = None
+    subtotal_amount: float | None = None
+    tax_amount: float | None = None
+    total_amount: float | None = None
+    payment_term: str | None = None
     charges: list[LLMCharge] = Field(default_factory=list)
     absent_fields: list[str] = Field(default_factory=list)
     unreadable_fields: list[str] = Field(default_factory=list)
     evidence: dict[str, str] = Field(default_factory=dict)
-    notes: Optional[str] = None
+    notes: str | None = None
 
 
 @dataclass
@@ -103,9 +103,6 @@ class LLMExtractor:
         if structured is not None:
             self._chain = base_prompt | structured
         # JSON fallback chain, always built: used when tool calling is unavailable
-        json_prompt = ChatPromptTemplate.from_messages(
-            [("system", prompts.SYSTEM), ("user", prompts.USER), ("assistant", "{{")]
-        )
         self._json_chain = base_prompt | llm
 
     def _supports_structured(self) -> bool:
@@ -150,14 +147,13 @@ class LLMExtractor:
     def _to_extraction(self, payload: dict[str, Any]) -> DocExtraction:
         data = LLMDoc.model_validate(payload)
         absent = {_k(f) for f in data.absent_fields}
-        unreadable = {_k(f) for f in data.unreadable_fields}
 
-        def tri_str(value: Optional[str], field: str) -> Tri[str]:
+        def tri_str(value: str | None, field: str) -> Tri[str]:
             if value and str(value).strip():
                 return Tri.present(str(value).strip(), data.evidence.get(field))
             return Tri.absent() if _k(field) in absent else Tri.unknown()
 
-        def tri_num(value: Optional[float], field: str) -> Tri[float]:
+        def tri_num(value: float | None, field: str) -> Tri[float]:
             if value is not None:
                 return Tri.present(round2(float(value)), data.evidence.get(field))
             return Tri.absent() if _k(field) in absent else Tri.unknown()

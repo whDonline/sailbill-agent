@@ -15,9 +15,9 @@ Two behaviours matter more than the rules themselves:
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import date
-from typing import Iterable, Optional
 
 from .models import (
     Bill,
@@ -37,13 +37,13 @@ _DATE_WINDOW_DAYS = 120
 
 @dataclass
 class MatchOutcome:
-    match: Optional[MatchResult] = None
+    match: MatchResult | None = None
     candidates: list[MatchResult] = field(default_factory=list)
     ambiguous: bool = False
     notes: list[str] = field(default_factory=list)
 
     @property
-    def rule(self) -> Optional[MatchRule]:
+    def rule(self) -> MatchRule | None:
         return self.match.rule if self.match else None
 
 
@@ -71,7 +71,7 @@ def _lines_for(bill: Bill, charge: ChargeExtraction) -> list[BillLine]:
     return [line for line in bill.lines if _same_charge(line.charge_item, charge.charge_item or charge.charge_item_raw)]
 
 
-def _best_line(lines: list[BillLine], charge: ChargeExtraction) -> Optional[BillLine]:
+def _best_line(lines: list[BillLine], charge: ChargeExtraction) -> BillLine | None:
     if not lines:
         return None
     amount = charge.amount
@@ -248,7 +248,7 @@ def _dates_close(doc: DocExtraction, bill: Bill, window: int = _DATE_WINDOW_DAYS
     return abs((doc_date - bill_date).days) <= window
 
 
-def _amount_close(a: Optional[float], b: Optional[float], tol: float = 0.01) -> bool:
+def _amount_close(a: float | None, b: float | None, tol: float = 0.01) -> bool:
     if a is None or b is None:
         return False
     return abs(float(a) - float(b)) <= tol

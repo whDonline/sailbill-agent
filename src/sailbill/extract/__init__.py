@@ -113,7 +113,7 @@ def merge(rules: DocExtraction, llm: DocExtraction) -> DocExtraction:
                 f"[CONFLICT] 费用行数不一致: 规则={len(rules.charges)} 模型={len(llm.charges)}（采用规则结果）"
             )
         elif llm.charges:
-            for rule_charge, llm_charge in zip(rules.charges, llm.charges):
+            for rule_charge, llm_charge in zip(rules.charges, llm.charges, strict=True):
                 if rule_charge.amount is not None and llm_charge.amount is not None:
                     if abs(float(rule_charge.amount) - float(llm_charge.amount)) > 0.01:
                         merged.warnings.append(

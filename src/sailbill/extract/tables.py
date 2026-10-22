@@ -10,8 +10,8 @@ on the model at all.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
-from typing import Iterable, Optional
+from collections.abc import Iterable
+from dataclasses import dataclass
 
 from ..models import ChargeExtraction, TableData
 from ..normalize.amounts import parse_amount, round2
@@ -52,15 +52,15 @@ def _label_exact(cell: str, labels: Iterable[str]) -> bool:
 
 @dataclass
 class ColumnMap:
-    charge: Optional[int] = None
-    quantity: Optional[int] = None
-    unit_price: Optional[int] = None
-    amount: Optional[int] = None
-    currency: Optional[int] = None
-    payment_term: Optional[int] = None
-    tax: Optional[int] = None
-    subtotal: Optional[int] = None
-    total: Optional[int] = None
+    charge: int | None = None
+    quantity: int | None = None
+    unit_price: int | None = None
+    amount: int | None = None
+    currency: int | None = None
+    payment_term: int | None = None
+    tax: int | None = None
+    subtotal: int | None = None
+    total: int | None = None
 
     @property
     def has_charge(self) -> bool:
@@ -139,7 +139,7 @@ def is_footer(row: list[str]) -> bool:
     return False
 
 
-def _cell(row: list[str], idx: Optional[int]) -> str:
+def _cell(row: list[str], idx: int | None) -> str:
     if idx is None or idx >= len(row):
         return ""
     return str(row[idx] or "").strip()
@@ -148,7 +148,7 @@ def _cell(row: list[str], idx: Optional[int]) -> str:
 def table_to_charges(
     table: TableData,
     *,
-    doc_currency: Optional[str] = None,
+    doc_currency: str | None = None,
     context: str = "",
 ) -> tuple[list[ChargeExtraction], dict[str, float], list[str]]:
     """Extract charges plus any totals found in the table."""
@@ -234,7 +234,7 @@ def _harvest_total(row: list[str], columns: ColumnMap, totals: dict[str, float])
 
 
 def _fallback_rows(
-    table: TableData, *, doc_currency: Optional[str], context: str
+    table: TableData, *, doc_currency: str | None, context: str
 ) -> tuple[list[ChargeExtraction], dict[str, float], list[str]]:
     """Handle header-less tables: ``<charge name> | <amount>`` rows."""
     charges: list[ChargeExtraction] = []

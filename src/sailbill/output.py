@@ -11,7 +11,7 @@ Two modes, deliberately:
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from .models import (
     AuditTrail,
@@ -27,17 +27,17 @@ from .models import (
 def build_record(
     operation: Operation,
     *,
-    document_type: Optional[str],
-    reference_no: Optional[str],
-    document_date: Optional[str],
-    issuer: Optional[str],
-    recipient: Optional[str],
-    charge_item: Optional[str],
-    amount: Optional[float],
-    currency: Optional[str],
-    payment_term: Optional[str],
-    accounting_entity: Optional[str],
-    posting_type: Optional[str],
+    document_type: str | None,
+    reference_no: str | None,
+    document_date: str | None,
+    issuer: str | None,
+    recipient: str | None,
+    charge_item: str | None,
+    amount: float | None,
+    currency: str | None,
+    payment_term: str | None,
+    accounting_entity: str | None,
+    posting_type: str | None,
     reasoning: list[str],
 ) -> BillRecordOut:
     return BillRecordOut(

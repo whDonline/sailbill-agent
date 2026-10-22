@@ -11,10 +11,10 @@ from __future__ import annotations
 import email
 import hashlib
 import shutil
+from collections.abc import Iterator
 from email import policy
 from email.message import Message
 from pathlib import Path
-from typing import Iterator
 
 from ..config import Settings
 from ..models import Attachment, NormalizedDocument, SourceKind, sha256_file

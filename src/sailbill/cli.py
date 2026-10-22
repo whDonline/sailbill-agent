@@ -12,9 +12,9 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Iterable
 from dataclasses import replace
 from pathlib import Path
-from typing import Iterable
 
 from . import __version__
 from .config import SETTINGS, Settings
@@ -74,7 +74,7 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     payload = [
         as_extended(record, extra) if args.extended else as_json(record)
-        for record, extra in zip(result.records, result.extras)
+        for record, extra in zip(result.records, result.extras, strict=True)
     ]
     text = json.dumps(payload, ensure_ascii=False, indent=2)
     if args.out:
@@ -200,7 +200,7 @@ def cmd_demo(args: argparse.Namespace) -> int:
     result = run_paths(files, store=store, use_llm=False)
     print(f"{'文件':28} {'操作':14} {'费用':32} {'金额':>10} {'币种':6} {'AR/AP':6}")
     print("-" * 104)
-    for record, extra in zip(result.records, result.extras):
+    for record, extra in zip(result.records, result.extras, strict=True):
         charge = (record.charge_details.charge_item or "-")[:32]
         amount = record.charge_details.amount
         print(

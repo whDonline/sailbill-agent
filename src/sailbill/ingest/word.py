@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..models import NormalizedDocument, TableData, SourceKind
+from ..models import NormalizedDocument, SourceKind, TableData
 
 
 def parse_word(doc: NormalizedDocument) -> None:

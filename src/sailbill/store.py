@@ -9,8 +9,9 @@ the same file twice cannot create the same bill twice.
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable, Optional
+from typing import Any
 
 from .models import Bill, BillLine
 from .normalize.charges import standardize_charge
@@ -18,14 +19,14 @@ from .normalize.currency import is_valid_iso as is_valid_currency
 
 
 class BillStore:
-    def __init__(self, bills: Optional[Iterable[Bill]] = None) -> None:
+    def __init__(self, bills: Iterable[Bill] | None = None) -> None:
         self._bills: dict[str, Bill] = {}
         for bill in bills or []:
             self._bills[bill.bill_id] = bill
 
     # -- construction -----------------------------------------------------
     @classmethod
-    def from_file(cls, path: str | Path | None) -> "BillStore":
+    def from_file(cls, path: str | Path | None) -> BillStore:
         if not path:
             return cls()
         p = Path(path)
@@ -41,7 +42,7 @@ class BillStore:
     def all(self) -> list[Bill]:
         return list(self._bills.values())
 
-    def get(self, bill_id: str) -> Optional[Bill]:
+    def get(self, bill_id: str) -> Bill | None:
         return self._bills.get(bill_id)
 
     def __len__(self) -> int:
@@ -53,7 +54,7 @@ class BillStore:
         # the caller's instance and commits go to a throw-away object)
         return True
 
-    def common_entity(self) -> Optional[str]:
+    def common_entity(self) -> str | None:
         """Most frequent accounting entity -- a sane default for the demo."""
         counts: dict[str, int] = {}
         for bill in self._bills.values():
@@ -71,8 +72,8 @@ class BillStore:
         charge_item: str,
         amount: float,
         currency: str,
-        payment_term: Optional[str] = None,
-        line_id: Optional[str] = None,
+        payment_term: str | None = None,
+        line_id: str | None = None,
     ) -> BillLine:
         """Insert or update one charge line.
 

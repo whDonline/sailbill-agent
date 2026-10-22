@@ -26,7 +26,7 @@ registry keyed by ``doc_id`` (see ``docs/graph.md``).
 from __future__ import annotations
 
 import time
-from typing import Any, Optional, TypedDict
+from typing import Any, TypedDict
 
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
@@ -62,7 +62,7 @@ def build_graph(
     settings: Settings,
     store: BillStore,
     resolver: PartyResolver,
-    accounting_entity: Optional[str],
+    accounting_entity: str | None,
     use_llm: bool,
     commit: bool = True,
     hitl: bool = False,
@@ -186,7 +186,7 @@ def run_unit_graph(
     settings: Settings,
     store: BillStore,
     resolver: PartyResolver,
-    accounting_entity: Optional[str],
+    accounting_entity: str | None,
     use_llm: bool,
     hitl: bool = False,
     commit: bool = True,

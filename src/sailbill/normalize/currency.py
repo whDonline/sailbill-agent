@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Optional
 
 # A pragmatic subset covering > 99% of freight documents, plus every code that
 # appears in common freight rate sheets.  Anything not in here is rejected.
@@ -110,7 +109,7 @@ _AMBIGUOUS_HINTS = {
 
 @dataclass
 class CurResult:
-    code: Optional[str] = None
+    code: str | None = None
     source: str = "none"  # text | symbol | alias | provided | invalid
     ambiguous: bool = False
     raw: str = ""
@@ -167,7 +166,7 @@ def normalize_currency(raw: object, *, context: str = "") -> CurResult:
     return CurResult(code=None, source="invalid", raw=text, warnings=[f"无法识别的币种: {text!r}"])
 
 
-def _resolve_ambiguous(default: str, context: str) -> Optional[str]:
+def _resolve_ambiguous(default: str, context: str) -> str | None:
     if not context:
         return None
     up = context.upper()

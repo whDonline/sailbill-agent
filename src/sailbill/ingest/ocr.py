@@ -20,13 +20,15 @@ from __future__ import annotations
 
 import json
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterable, Optional
+from typing import Any
 from urllib.parse import quote
 
 from ..config import SETTINGS, Settings
 from ..models import NormalizedDocument, sha256_file
+
 
 # --------------------------------------------------------------------------- #
 # errors
@@ -76,7 +78,7 @@ class UrlResolver:
             return self._map[sha]
 
         mode = self.settings.file_delivery
-        url: Optional[str] = None
+        url: str | None = None
         if mode in {"public", "auto"} and self.settings.public_base_url:
             url = self.settings.public_base_url.rstrip("/") + "/" + quote(p.name)
         if url is None and mode in {"upload", "auto"} and self.settings.upload_endpoint:
@@ -252,7 +254,7 @@ def _iter_dicts(node: Any, depth: int = 0) -> Iterable[dict[str, Any]]:
             yield from _iter_dicts(item, depth + 1)
 
 
-def _find_list(node: Any, keys: tuple[str, ...], depth: int = 0) -> Optional[list[Any]]:
+def _find_list(node: Any, keys: tuple[str, ...], depth: int = 0) -> list[Any] | None:
     if depth > 8:
         return None
     if isinstance(node, dict):
@@ -297,7 +299,7 @@ def find_charges(payload: Any) -> list[dict[str, Any]]:
 def find_references(payload: Any) -> dict[str, list[str]]:
     refs: dict[str, list[str]] = {}
     for node in _iter_dicts(payload):
-        for field, names in _REFERENCE_KEYS.items():
+        for kind, names in _REFERENCE_KEYS.items():
             value = _lookup(node, names)
             if not value:
                 continue
@@ -313,36 +315,36 @@ def find_references(payload: Any) -> dict[str, list[str]]:
             elif isinstance(value, str):
                 values.append(value.strip())
             for v in values:
-                if v and len(v) <= 40 and v not in refs.setdefault(field, []):
-                    refs[field].append(v)
+                if v and len(v) <= 40 and v not in refs.setdefault(kind, []):
+                    refs[kind].append(v)
     return {k: v for k, v in refs.items() if v}
 
 
 def find_parties(payload: Any) -> dict[str, Any]:
     parties: dict[str, Any] = {}
     for node in _iter_dicts(payload):
-        for field, names in _PARTY_KEYS.items():
-            if field in parties:
+        for kind, names in _PARTY_KEYS.items():
+            if kind in parties:
                 continue
             value = _lookup(node, names)
             if isinstance(value, str) and value.strip():
-                parties[field] = value.strip()
+                parties[kind] = value.strip()
     return parties
 
 
 def find_doc_meta(payload: Any) -> dict[str, Any]:
     meta: dict[str, Any] = {}
     for node in _iter_dicts(payload):
-        for field, names in {
+        for kind, names in {
             "document_type": ("filetype", "doctype", "documenttype", "typename", "单据类型"),
             "invoice_no": ("invoicenumber", "invoiceno", "invoice_number", "发票号"),
             "created": ("createdate", "date", "documentdate", "日期"),
         }.items():
-            if field in meta:
+            if kind in meta:
                 continue
             value = _lookup(node, names)
             if isinstance(value, str) and value.strip():
-                meta[field] = value.strip()
+                meta[kind] = value.strip()
     return meta
 
 

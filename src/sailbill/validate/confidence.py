@@ -8,8 +8,8 @@ record was sent to ``PENDING_REVIEW`` instead of being booked.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Iterable, Optional
 
 from ..config import SETTINGS, Settings
 from ..models import ChargeExtraction, DocExtraction, Issue, MatchResult
@@ -38,7 +38,7 @@ def score_charge(
     charge: ChargeExtraction,
     *,
     issues: Iterable[Issue] = (),
-    match: Optional[MatchResult] = None,
+    match: MatchResult | None = None,
     ambiguous_match: bool = False,
     settings: Settings | None = None,
 ) -> Confidence:

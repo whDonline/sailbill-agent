@@ -9,7 +9,8 @@ line of code.  Values that cannot be grounded are downgraded to ``unknown``
 from __future__ import annotations
 
 import re
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Any
 
 from ..models import DocExtraction, Tri
 

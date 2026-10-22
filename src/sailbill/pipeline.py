@@ -9,9 +9,10 @@ reasoning -- which is what the audit trail is built from.
 from __future__ import annotations
 
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterable, Optional
+from typing import Any
 
 from .config import SETTINGS, Settings
 from .finance import PostingDecision
@@ -146,7 +147,7 @@ def run_paths(
     *,
     settings: Settings | None = None,
     store: BillStore | None = None,
-    accounting_entity: Optional[str] = None,
+    accounting_entity: str | None = None,
     use_llm: bool = True,
     include_context_docs: bool = True,
     hitl: bool = False,
@@ -201,10 +202,10 @@ class UnitState:
 
     primary: NormalizedDocument
     context: list[NormalizedDocument] = field(default_factory=list)
-    extraction: Optional[DocExtraction] = None
+    extraction: DocExtraction | None = None
     issues: list[Issue] = field(default_factory=list)
-    entity: Optional[str] = None
-    posting: Optional[PostingDecision] = None
+    entity: str | None = None
+    posting: PostingDecision | None = None
     records: list = field(default_factory=list)
     extras: list[dict[str, Any]] = field(default_factory=list)
 
@@ -411,7 +412,7 @@ def pending_record(
     )
 
 
-def _inherit(field: Tri, fallback: Optional[str]) -> Optional[str]:
+def _inherit(field: Tri, fallback: str | None) -> str | None:
     if field.is_present and field.value is not None:
         value = field.value
         return value.isoformat() if hasattr(value, "isoformat") else str(value)
@@ -454,7 +455,7 @@ def _change_summary(charge: ChargeExtraction, line, changed: list[str]) -> str:
     return f"（{', '.join(parts)}）" if parts else ""
 
 
-def infer_entity(ext: DocExtraction, store: BillStore, resolver: PartyResolver) -> Optional[str]:
+def infer_entity(ext: DocExtraction, store: BillStore, resolver: PartyResolver) -> str | None:
     """Use the accounting entity of the bill we would be updating, else the
     most common one in the store (demo-friendly default, overridable via CLI)."""
     for charge in ext.charges:
