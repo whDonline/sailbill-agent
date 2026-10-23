@@ -45,6 +45,16 @@ class OcrDeliveryError(OcrError):
     """Could not turn a local file into a URL the service can download."""
 
 
+def _parse_extra_fields(raw: str) -> dict[str, str]:
+    """Parse "k1=v1,k2=v2" into a dict for extra multipart form fields."""
+    extra: dict[str, str] = {}
+    for pair in (raw or "").split(","):
+        key, _, value = pair.partition("=")
+        if key.strip() and value.strip():
+            extra[key.strip()] = value.strip()
+    return extra
+
+
 # --------------------------------------------------------------------------- #
 # local file -> URL
 # --------------------------------------------------------------------------- #
@@ -105,15 +115,44 @@ class UrlResolver:
         import requests
 
         data = path.read_bytes()
-        files = {"file": (path.name, data, "application/octet-stream")}
-        resp = requests.post(self.settings.upload_endpoint, files=files, timeout=(10, 120))
+        # 部分中转服务要求额外表单字段（如 litterbox 的 reqtype/time）
+        extra = _parse_extra_fields(self.settings.upload_extra_fields)
+        field = self.settings.upload_file_field or "file"
+        files = {field: (path.name, data, "application/octet-stream")}
+        resp = requests.post(
+            self.settings.upload_endpoint, data=extra or None, files=files, timeout=(10, 120)
+        )
         resp.raise_for_status()
-        payload = resp.json()
-        for key in ("link", "url", "download_url", "downloadUrl", "file"):
-            val = payload.get(key) if isinstance(payload, dict) else None
-            if isinstance(val, str) and val.startswith("http"):
-                return val
-        raise OcrDeliveryError(f"上传成功但响应中没有下载链接: {str(payload)[:300]}")
+        url = self._extract_url(resp)
+        if url is None:
+            raise OcrDeliveryError(f"上传成功但响应中没有下载链接: {resp.text[:300]}")
+        return url
+
+    @staticmethod
+    def _extract_url(resp: Any) -> str | None:
+        # 宽容解析：JSON 顶层常见字段 -> data.url 嵌套 -> 纯文本 URL
+        try:
+            payload = resp.json()
+        except ValueError:
+            payload = None
+        if isinstance(payload, dict):
+            for key in ("link", "url", "download_url", "downloadUrl", "file"):
+                val = payload.get(key)
+                if isinstance(val, str) and val.startswith("http"):
+                    return val
+            data_field = payload.get("data")
+            if isinstance(data_field, dict) and isinstance(data_field.get("url"), str):
+                return data_field["url"]
+            # uguu.se 风格：{"files": [{"url": ...}, ...]}
+            files_field = payload.get("files")
+            if isinstance(files_field, list):
+                for item in files_field:
+                    if isinstance(item, dict) and isinstance(item.get("url"), str):
+                        return item["url"]
+        text = resp.text.strip()
+        if text.startswith("http"):
+            return text.splitlines()[0].strip()
+        return None
 
 
 # --------------------------------------------------------------------------- #

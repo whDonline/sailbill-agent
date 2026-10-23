@@ -59,6 +59,11 @@ class Settings:
     file_delivery: str = "auto"  # auto | public | upload | none
     public_base_url: str = ""
     upload_endpoint: str = ""
+    # multipart field name for the file part (uguu.se uses "files[]")
+    upload_file_field: str = "file"
+    # extra multipart form fields required by the upload service,
+    # e.g. litterbox: "reqtype=fileupload,time=1h"
+    upload_extra_fields: str = ""
 
     # decision thresholds
     review_threshold: float = 0.60
@@ -99,6 +104,8 @@ class Settings:
             file_delivery=_env("SAILBILL_FILE_DELIVERY", "auto") or "auto",
             public_base_url=_env("SAILBILL_PUBLIC_BASE_URL"),
             upload_endpoint=_env("SAILBILL_UPLOAD_ENDPOINT"),
+            upload_file_field=_env("SAILBILL_UPLOAD_FILE_FIELD", "file") or "file",
+            upload_extra_fields=_env("SAILBILL_UPLOAD_EXTRA_FIELDS"),
             review_threshold=_float("SAILBILL_CONFIDENCE_REVIEW", 0.60),
             amount_tolerance=_float("SAILBILL_AMOUNT_TOLERANCE", 0.01),
             accounting_entity=_env("SAILBILL_ACCOUNTING_ENTITY"),
