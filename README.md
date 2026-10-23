@@ -37,7 +37,7 @@ SQLite 账本、配置、上传文件全部保存在本机用户目录；大模�
 | 6 | 结合记账主体判断 AR/AP | ✅ | [finance.py](src/sailbill/finance.py) 主体×双方×方向矩阵；无法判定转 PENDING_REVIEW 而非默认 AP，`tests/test_finance_validate.py` |
 | 7 | 检测重复账单和数据冲突 | ✅ | [business.py](src/sailbill/validate/business.py)（重复提取/合计闭合/OCR 混淆）+ 抽取层冲突仲裁，专项测试覆盖 |
 | 8 | harness 工程提升稳定性与准确性 | ✅ | 八层防线设计见下节；金标评测 + CI 门禁（[harness/](harness)） |
-| 9 | 5 点以上自己的思考 | ✅ | 8 点（业务 + 技术），见下节；完整版 [docs/reflections.md](docs/reflections.md) |
+| 9 | 5 点以上自己的思考 | ✅ | 6 点（业务 + 技术），见下节；完整版 [docs/reflections.md](docs/reflections.md) |
 | 10 | 基于 Python 和 LangChain 实现 | ✅ | `langchain-core` + `langchain-openai`（OpenAI 兼容端点，实测 DeepSeek Flash），[llm.py](src/sailbill/extract/llm.py)；编排为 LangGraph 状态机 |
 
 **全量回归：pytest 186 个测试通过（全离线可跑）；真实单据端到端实测见第四节。**
@@ -55,7 +55,7 @@ SQLite 账本、配置、上传文件全部保存在本机用户目录；大模�
 7. **幂等与可恢复**：文件指纹幂等键防重复入账；LangGraph checkpoint 断点续跑 + 写账前人工闸门（HITL）。
 8. **评测 harness 持续量化**：金标集基于真实业务单据（字段级评分、个人信息字段忽略规则、无样本自动跳过、有样本 CI 门禁），每次改 prompt/模型都能量化变好还是变坏。
 
-## 四、项目思考（验收 9，共 8 点）
+## 四、项目思考（验收 9，共 6 点）
 
 **业务上：**
 
