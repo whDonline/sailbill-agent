@@ -159,7 +159,7 @@ flowchart TD
 
 ```bash
 # 任意 OpenAI 兼容端点：DeepSeek / Qwen / 本地 vLLM
-SAILBILL_LLM_MODEL=deepseek-chat
+SAILBILL_LLM_MODEL=deepseek-flash
 SAILBILL_LLM_BASE_URL=https://api.deepseek.com/v1
 SAILBILL_LLM_API_KEY=sk-...
 

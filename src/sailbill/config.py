@@ -41,7 +41,7 @@ def _bool(key: str, default: bool = False) -> bool:
 class Settings:
     # LLM
     llm_provider: str = "deepseek"
-    llm_model: str = "deepseek-chat"
+    llm_model: str = "deepseek-flash"
     llm_base_url: str = "https://api.deepseek.com/v1"
     llm_api_key: str = ""
     llm_temperature: float = 0.0
@@ -90,7 +90,7 @@ class Settings:
     def load(cls) -> Settings:
         return cls(
             llm_provider=_env("SAILBILL_LLM_PROVIDER", "deepseek"),
-            llm_model=_env("SAILBILL_LLM_MODEL", "deepseek-chat"),
+            llm_model=_env("SAILBILL_LLM_MODEL", "deepseek-flash"),
             llm_base_url=_env("SAILBILL_LLM_BASE_URL", "https://api.deepseek.com/v1"),
             llm_api_key=_env("SAILBILL_LLM_API_KEY") or _env("DEEPSEEK_API_KEY") or _env("OPENAI_API_KEY"),
             llm_temperature=_float("SAILBILL_LLM_TEMPERATURE", 0.0),

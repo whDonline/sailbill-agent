@@ -88,6 +88,13 @@ class LLMExtractor:
         from langchain_core.prompts import ChatPromptTemplate
         from langchain_openai import ChatOpenAI
 
+        # deepseek-flash 默认开启思考模式，而思考模式不支持 tool_choice；
+        # 结构化抽取用非思考模式更快更省，仅对 DeepSeek 端点生效
+        extra_body = (
+            {"thinking": {"type": "disabled"}}
+            if self.settings.llm_provider.lower().startswith("deepseek")
+            else None
+        )
         llm = ChatOpenAI(
             model=self.settings.llm_model,
             api_key=self.settings.llm_api_key,
@@ -95,11 +102,18 @@ class LLMExtractor:
             temperature=self.settings.llm_temperature,
             timeout=self.settings.llm_timeout,
             max_retries=1,
+            extra_body=extra_body,
         )
         base_prompt = ChatPromptTemplate.from_messages(
             [("system", prompts.SYSTEM), ("user", prompts.USER)]
         )
-        structured = llm.with_structured_output(LLMDoc) if self._supports_structured() else None
+        # 显式走 function calling：DeepSeek 已下线 json_schema/json_object
+        # 响应格式（400 "response_format type is unavailable"），工具调用仍受支持
+        structured = (
+            llm.with_structured_output(LLMDoc, method="function_calling")
+            if self._supports_structured()
+            else None
+        )
         if structured is not None:
             self._chain = base_prompt | structured
         # JSON fallback chain, always built: used when tool calling is unavailable
