@@ -57,10 +57,10 @@ class GraphState(TypedDict, total=False):
 
 ```bash
 # 图引擎 + 写回账单库
-sailbill run samples/ --commit --store samples/existing_bills.json --save-bills out/bills.json
+sailbill run TestSamples/ --commit --store bills.json --save-bills out/bills.json
 
 # 写账前暂停，等人确认（同进程内 resume）
-sailbill run samples/debit_note.pdf --hitl --commit
+sailbill run bill.pdf --hitl --commit
 #  → [sailbill] 1 个单据已在写账前暂停（LangGraph interrupt）
 ```
 

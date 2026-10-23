@@ -40,15 +40,14 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[dev,llm]"
-      - name: Generate synthetic samples
-        run: python scripts/make_samples.py
       - name: Unit tests (offline, no network)
         run: pytest -q
+      # TestSamples/ 是真实客户单据，不随仓库分发：评测仅在有样本的环境（本地）执行
       - name: Golden-set evaluation gate
-        if: matrix.python-version == '3.12'
+        if: matrix.python-version == '3.12' && hashFiles('TestSamples/**') != ''
         run: python harness/run_eval.py --min-score 0.95 --out eval/report.md
       - name: Upload evaluation report
-        if: matrix.python-version == '3.12'
+        if: matrix.python-version == '3.12' && hashFiles('TestSamples/**') != ''
         uses: actions/upload-artifact@v4
         with:
           name: eval-report

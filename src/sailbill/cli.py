@@ -1,8 +1,8 @@
 """Command line interface.
 
-    sailbill run samples/debit_note.pdf --store samples/existing_bills.json
-    sailbill run samples/ --out out/records.json --store samples/existing_bills.json
-    sailbill ocr samples/debit_note.pdf
+    sailbill run TestSamples/ --entity "AEBO TCO IMPORT LLC"
+    sailbill run bill.pdf --store bills.json --out out/records.json
+    sailbill ocr bill.pdf
     sailbill demo
     sailbill eval --dataset eval/golden
 """
@@ -56,7 +56,7 @@ def _expand(paths: Iterable[str]) -> list[Path]:
 # --------------------------------------------------------------------------- #
 def cmd_run(args: argparse.Namespace) -> int:
     settings = _settings_from_args(args)
-    store = BillStore.from_file(args.store)
+    store = BillStore.from_file(args.store) if args.store else BillStore()
     files = _expand(args.files)
     if not files:
         print("没有可处理的文件", file=sys.stderr)
@@ -190,13 +190,13 @@ def cmd_ocr(args: argparse.Namespace) -> int:
 
 
 def cmd_demo(args: argparse.Namespace) -> int:
-    root = Path(args.dir or "samples")
+    root = Path(args.dir) if args.dir else Path("out/test-scratch/samples")
     store_path = root / "existing_bills.json"
     files = [p for p in sorted(root.iterdir()) if p.suffix.lower() in {".pdf", ".xlsx", ".docx", ".eml"}]
     if not files:
-        print("samples/ 为空，请先运行 python scripts/make_samples.py", file=sys.stderr)
+        print("样本目录为空，请先运行 python tests/make_samples.py", file=sys.stderr)
         return 1
-    store = BillStore.from_file(store_path)
+    store = BillStore.from_file(store_path) if store_path.exists() else BillStore()
     result = run_paths(files, store=store, use_llm=False)
     print(f"{'文件':28} {'操作':14} {'费用':32} {'金额':>10} {'币种':6} {'AR/AP':6}")
     print("-" * 104)
@@ -233,7 +233,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     run_p = sub.add_parser("run", help="处理单据并输出标准 JSON")
     run_p.add_argument("files", nargs="+", help="文件或目录（EML/PDF/图片/Excel/Word）")
-    run_p.add_argument("--store", default="samples/existing_bills.json", help="已有账单 JSON")
+    run_p.add_argument("--store", default=None, help="已有账单 JSON（默认空账单库）")
     run_p.add_argument("--out", default=None, help="输出 JSON 文件")
     run_p.add_argument("--trace", default=None, help="输出 trace JSON 文件")
     run_p.add_argument("--entity", default=None, help="记账主体（默认从账单库推断）")
@@ -258,7 +258,7 @@ def build_parser() -> argparse.ArgumentParser:
     ocr_p.set_defaults(func=cmd_ocr)
 
     demo_p = sub.add_parser("demo", help="用内置样本跑一遍全链路")
-    demo_p.add_argument("--dir", default=None, help="样本目录，默认 samples/")
+    demo_p.add_argument("--dir", default=None, help="样本目录，默认 out/test-scratch/samples")
     demo_p.set_defaults(func=cmd_demo)
 
     eval_p = sub.add_parser("eval", help="运行金标评测")

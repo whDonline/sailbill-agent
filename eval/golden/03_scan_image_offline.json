@@ -1,0 +1,16 @@
+{
+  "name": "scan_image_offline_review",
+  "description": "扫描图片在离线（无 OCR）模式下：零费用、零虚构，整单转人工复核",
+  "files": ["TestSamples/图片示例.png"],
+  "accounting_entity": "AEBO TCO IMPORT LLC",
+  "expect": {
+    "document": {
+      "document_type": null,
+      "reference_no": null,
+      "document_date": null,
+      "issuer": null,
+      "recipient": null
+    },
+    "charges": []
+  }
+}

@@ -22,12 +22,12 @@ install:
 	$(BIN)/python -m pip install -e ".[dev,llm]"
 
 samples:
-	$(BIN)/python scripts/make_samples.py
+	$(BIN)/python tests/make_samples.py
 
 demo: samples
 	$(BIN)/python -m sailbill demo
 
-test: samples
+test:
 	$(BIN)/python -m pytest -q
 
 lint:
@@ -37,9 +37,9 @@ eval: samples
 	$(BIN)/python harness/run_eval.py --min-score 0.95 --out eval/report.md
 
 trace: samples
-	$(BIN)/python -m sailbill run samples --store samples/existing_bills.json \
+	$(BIN)/python -m sailbill run out/test-scratch/samples --store out/test-scratch/samples/existing_bills.json \
 		--out out/records.json --trace out/trace.json --silent 2>/dev/null || \
-	$(BIN)/python -m sailbill run samples --store samples/existing_bills.json \
+	$(BIN)/python -m sailbill run out/test-scratch/samples --store out/test-scratch/samples/existing_bills.json \
 		--out out/records.json --trace out/trace.json --quiet
 
 clean:

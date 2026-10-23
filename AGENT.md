@@ -263,7 +263,7 @@ pytest tests/test_real_samples.py              # 真实样本回归（无样本�
 
 # 状态机引擎（LangGraph 是核心依赖，无需额外安装）
 python -m sailbill run TestSamples --commit --save-bills out/bills.json
-python -m sailbill run samples/debit_note.pdf --hitl --commit   # 写账前暂停，人工确认后 resume
+python -m sailbill run TestSamples --hitl --commit   # 写账前暂停，人工确认后 resume
 ```
 
 **两个必须显式配置、否则结果会"看起来没跑通"的项**
@@ -276,7 +276,7 @@ python -m sailbill run samples/debit_note.pdf --hitl --commit   # 写账前暂�
 
 **红线（任何改动都不得违反）**
 
-1. 不得提交真实客户数据、真实运费、公司名或密钥；真实样本目录 `TestSamples/`、`samples/private/` 已在 `.gitignore`。
+1. 不得提交真实客户数据、真实运费、公司名或密钥；真实样本目录 `TestSamples/` 已在 `.gitignore`，测试合成样本仅由 `tests/make_samples.py` 运行时生成到 `out/`，均不入库。
 2. 不得为了"看起来更好"而虚构字段值：原文找不到依据就置 `null` 并转 `PENDING_REVIEW`（题面七.1）。
 3. 不得在判不出 AR/AP 时默认给 `AP`；不得用 `null` 覆盖已有账单中原值（题面四.6、四.5）。
 4. 默认输出必须严格符合题面第五节契约；调试信息只能进 `--extended` 的 `_trace`。

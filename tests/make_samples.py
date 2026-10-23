@@ -1,15 +1,16 @@
-"""Generate the synthetic sample corpus (no real customer data, ever).
+"""Generate the synthetic sample corpus used by the test-suite (no real data).
 
-Everything under ``samples/`` is produced by this script so the repository can
-be open sourced without leaking anybody's freight rates.  It writes:
+The files are *not* committed to the repository -- they are regenerated on
+demand (pytest fixture or CLI) into ``out/test-scratch/samples/`` so the repo
+ships only the real ``TestSamples/`` corpus (git-ignored).  It writes:
 
 * ``debit_note.xlsx``  -- spreadsheet DN with title rows + totals block
 * ``credit_note.docx`` -- Word CN with a charge table
 * ``debit_note.pdf``   -- text-layer PDF built by a tiny embedded PDF writer
 * ``booking_email.eml``-- email whose *attachments* carry the real content
-* ``existing_bills.json`` -- already booked bills used by the matcher demo
+* ``existing_bills.json`` -- already booked bills used by the matcher tests
 
-Run: ``python scripts/make_samples.py``
+Run manually: ``python tests/make_samples.py``
 """
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SAMPLES = ROOT / "samples"
+SAMPLES = ROOT / "out" / "test-scratch" / "samples"
 
 
 # --------------------------------------------------------------------------- #
@@ -323,7 +324,7 @@ EXPECTED = [
 def main(force: bool = False) -> int:
     SAMPLES.mkdir(parents=True, exist_ok=True)
     if not force and all((SAMPLES / name).exists() for name in EXPECTED):
-        print("samples/ 已完整存在，跳过生成（需要重新生成请加 --force）")
+        print(f"样本已完整存在，跳过生成（需要重新生成请加 --force）: {SAMPLES}")
         for name in EXPECTED:
             print(f"  {name}")
         return 0

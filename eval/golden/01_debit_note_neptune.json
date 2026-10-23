@@ -1,0 +1,20 @@
+{
+  "name": "debit_note_neptune",
+  "description": "真实美式 Debit Note（rate qty P/C amount 表格）：3 条费用全部新增为 AP应付，合计 1410.40",
+  "files": ["TestSamples/PDF 示例账单2.pdf"],
+  "accounting_entity": "AEBO TCO IMPORT LLC",
+  "expect": {
+    "document": {
+      "document_type": "Debit Note",
+      "reference_no": "DC-108478",
+      "document_date": "2026-10-24",
+      "issuer": "NEPTUNE SHIPPING LIMITED",
+      "recipient": "AEBO TCO IMPORT LLC"
+    },
+    "charges": [
+      {"charge_item": "Handling Charge", "amount": 65.0, "currency": "USD", "payment_term": "CC", "operation": "CREATE", "posting_type": "AP"},
+      {"charge_item": "Detention Free Time Charge", "amount": 1310.4, "currency": "USD", "payment_term": "CC", "operation": "CREATE", "posting_type": "AP"},
+      {"charge_item": "Handling Charge", "amount": 35.0, "currency": "USD", "payment_term": "CC", "operation": "CREATE", "posting_type": "AP"}
+    ]
+  }
+}

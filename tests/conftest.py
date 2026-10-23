@@ -16,15 +16,18 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-SAMPLES = ROOT / "samples"
+SAMPLES = ROOT / "out" / "test-scratch" / "samples"
 # stable, writable, git-ignored scratch area
 SCRATCH = ROOT / "out" / "test-scratch"
 
 
 @pytest.fixture(scope="session")
 def samples_dir() -> Path:
+    """Synthetic corpus, regenerated on demand (never committed to git)."""
     if not SAMPLES.exists() or not any(SAMPLES.iterdir()):
-        pytest.skip("samples/ 为空，请先运行 python scripts/make_samples.py")
+        from make_samples import main as make_samples
+
+        make_samples()
     return SAMPLES
 
 

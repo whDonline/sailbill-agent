@@ -142,14 +142,14 @@ $ python harness/run_eval.py --min-score 0.9
 
 ## 2. 如何新增一个金标用例
 
-1. 把（脱敏后的）文件放到 `samples/`；
+1. 把（脱敏后的）文件放进一个本地目录（推荐 `TestSamples/`，已在 `.gitignore`）；
 2. 新建 `eval/golden/NN_xxx.json`：
 
 ```json
 {
   "name": "my_case",
-  "files": ["samples/my_bill.pdf"],
-  "store": "samples/existing_bills.json",
+  "files": ["TestSamples/my_bill.pdf"],
+  "store": null,
   "accounting_entity": null,
   "expect": {
     "document": {"document_type": "Debit Note", "reference_no": "DN-1", "document_date": "2026-09-20",

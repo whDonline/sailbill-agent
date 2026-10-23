@@ -1,0 +1,18 @@
+{
+  "name": "arrival_notice_review",
+  "description": "CMA CGM 到货通知：单条 On Carriage 费用，双方信息不可信 → 转人工复核，绝不猜 AR/AP",
+  "files": ["TestSamples/PDF示例账单1.pdf"],
+  "accounting_entity": "AEBO TCO IMPORT LLC",
+  "expect": {
+    "document": {
+      "document_type": "Arrival Notice",
+      "reference_no": null,
+      "document_date": "2026-10-26",
+      "issuer": "CMACGM & ANL",
+      "recipient": null
+    },
+    "charges": [
+      {"charge_item": "On Carriage", "amount": 245.0, "currency": "USD", "operation": "PENDING_REVIEW"}
+    ]
+  }
+}

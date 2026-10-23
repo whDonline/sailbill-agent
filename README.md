@@ -218,19 +218,21 @@ OCR 响应按文件 `sha256` 缓存，重跑零成本；`SAILBILL_OCR_FOR_PDF=tr
 ## 常用命令
 
 ```bash
-sailbill run samples/debit_note.pdf --store samples/existing_bills.json      # 单文件
-sailbill run samples/ --out out/records.json --trace out/trace.json          # 整目录 + trace
-sailbill run samples/debit_note.xlsx --extended                              # 附带置信度/证据/匹配细节
-sailbill run samples/ --entity "XYZ Freight Forwarding Ltd"                  # 指定记账主体
-sailbill run samples/ --offline --no-llm                                     # 完全离线、纯规则
-sailbill names samples/                                                      # 费用名：原始写法 → 标准名称
-sailbill ocr samples/debit_note.pdf                                          # 只看 OCR 结构化结果
-sailbill eval --min-score 0.9                                                # 金标评测（CI 门禁）
+sailbill run TestSamples/ --entity "AEBO TCO IMPORT LLC"                     # 真实样本整目录
+sailbill run bill.pdf --store bills.json --out out/records.json              # 单文件 + 账单库
+sailbill run bill.xlsx --extended                                            # 附带置信度/证据/匹配细节
+sailbill run TestSamples/ --offline --no-llm                                 # 完全离线、纯规则
+sailbill names TestSamples/                                                  # 费用名：原始写法 → 标准名称
+sailbill ocr bill.pdf                                                        # 只看 OCR 结构化结果
+sailbill eval --min-score 0.95                                               # 金标评测（本地，需 TestSamples/）
 python harness/run_eval.py --llm                                             # 含大模型的评测
 
 # 写回账单库 / 写账前人工确认（LangGraph 状态机）
-sailbill run samples/ --commit --save-bills out/bills.json                    # 把 CREATE/UPDATE 写回账单库
-sailbill run samples/debit_note.pdf --hitl --commit                          # 写账前暂停，等人确认
+sailbill run TestSamples/ --commit --save-bills out/bills.json                # 把 CREATE/UPDATE 写回账单库
+sailbill run bill.pdf --hitl --commit                                        # 写账前暂停，等人确认
+
+# 合成样本（测试用，不入库）：先生成再演示
+python tests/make_samples.py && sailbill demo
 ```
 
 退出码：`0` 成功，`1` 出错或评测未达标，`2` 参数/输入问题 —— 便于接入流水线。
@@ -248,11 +250,10 @@ sailbill-agent/
 │  ├─ normalize/   amounts.py currency.py charges.py payment.py parties.py dates.py html.py
 │  ├─ validate/    business.py confidence.py
 │  ├─ matching.py  finance.py  pipeline.py  output.py  store.py  config.py  models.py  cli.py
-├─ harness/run_eval.py          # 金标评测 + 指标 + CI 门禁
-├─ eval/golden/*.json           # 6 个金标用例
-├─ samples/                     # 合成样本（脚本生成，无真实数据）
-├─ scripts/make_samples.py      # 含极简 PDF 生成器（零第三方依赖）
-├─ tests/                       # 186 个测试
+├─ harness/run_eval.py          # 金标评测 + 指标 + 门禁
+├─ eval/golden/*.json           # 4 个金标用例（基于 TestSamples/ 真实单据）
+├─ tests/                       # 测试 + 合成样本生成器（运行时生成到 out/，不入库）
+├─ TestSamples/                 # 真实单据（git-ignored，不随仓库分发）
 └─ docs/  architecture.md · parsing.md · graph.md · harness.md · reflections.md · adr/
 ```
 
@@ -281,8 +282,8 @@ sailbill-agent/
 
 ## 数据与合规
 
-- 仓库内 **全部为脚本生成的合成数据**，不含任何真实客户运费、公司或人名；
-- 真实数据请放进 `samples/private/`（已在 `.gitignore` 中）；
+- 仓库内 **不含任何真实客户运费、公司或人名**：真实单据在 `TestSamples/`（git-ignored，不随仓库分发），测试用的合成样本由 `tests/make_samples.py` 运行时生成到 `out/`，均不入库；
+- 自有真实数据请放进 `data/private/`（已在 `.gitignore` 中）；
 - 密钥只通过环境变量/`.env` 提供，`.env` 不入库；
 - 账单包含商业敏感信息，生产部署请开启日志脱敏并有明确的数据留存策略。
 

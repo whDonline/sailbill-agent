@@ -17,10 +17,10 @@ out/
 *.log
 
 # private customer data must never be committed
-samples/private/
 data/private/
 tests/fixtures/private/
 TestSamples/
+eval/report.md
 
 # build artefacts left behind by pip/pytest inside the workspace
 pip-build-tracker-*/

@@ -97,7 +97,7 @@ def test_fresh_document_is_inserted_into_the_store(settings):
     """Same document twice: the second run must not create duplicates."""
     from sailbill.store import BillStore as Store
 
-    store = Store.from_file(REAL.parent / "samples" / "existing_bills.json")
+    store = Store()
     kwargs = dict(settings=_offline(settings), use_llm=False, accounting_entity="AEBO TCO IMPORT LLC")
     first = run_paths([_find("示例账单2")], store=store, **kwargs)
     second = run_paths([_find("示例账单2")], store=store, **kwargs)

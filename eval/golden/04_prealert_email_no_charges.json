@@ -1,0 +1,14 @@
+{
+  "name": "prealert_email_no_charges",
+  "description": "预报警邮件（JPG+MBL+HBL 附件）：提单类单据与未 OCR 的图片均不产生费用记录，邮件头不作为业务双方",
+  "files": ["TestSamples/深圳容宇 PRE-ALERT SSZSE26093128 VASINGER LLC 1x40HQ  CNTR NO._ TIIU8975975   MBL NO._ OOLU4055331281  Arrived time 2026-10-30.eml"],
+  "accounting_entity": "AEBO TCO IMPORT LLC",
+  "doc_ignore": ["document_date", "issuer", "recipient"],
+  "expect": {
+    "document": {
+      "document_type": null,
+      "reference_no": null
+    },
+    "charges": []
+  }
+}

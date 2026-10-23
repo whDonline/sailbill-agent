@@ -1,4 +1,4 @@
-﻿"""Golden-set evaluation harness.
+"""Golden-set evaluation harness.
 
 This is the part the assignment calls "harness engineering": a reproducible way
 to answer *"did my change make the agent better or worse?"* without eyeballing
@@ -132,7 +132,9 @@ def evaluate_case(case_path: Path, *, use_llm: bool, offline: bool) -> CaseResul
     missing = [str(f) for f in files if not f.exists()]
     if missing:
         result.ok = False
-        result.errors.append(f"缺少输入文件: {missing}（先运行 scripts/make_samples.py）")
+        result.errors.append(
+            f"缺少输入文件: {missing}（TestSamples/ 为真实样本，不随仓库分发，仅本地评测）"
+        )
         return result
 
     from dataclasses import replace
@@ -174,6 +176,9 @@ def evaluate_case(case_path: Path, *, use_llm: bool, offline: bool) -> CaseResul
         got_doc = {}
 
     for field_name in DOC_FIELDS:
+        # 用例可用 doc_ignore 跳过无业务意义的字段（如邮件头里的发件人）
+        if field_name in set(spec.get("doc_ignore") or ()):
+            continue
         result.doc_total += 1
         want = exp_doc.get(field_name)
         got = got_doc.get(field_name)
@@ -190,7 +195,12 @@ def evaluate_case(case_path: Path, *, use_llm: bool, offline: bool) -> CaseResul
     # ---- charges ----------------------------------------------------------
     result.expected = len(exp_charges)
     result.produced = len(records)
-    produced_charges = [record["charge_details"] for record in records]
+    # charge_item 为 None 的记录是"无费用转人工复核"的占位记录，不构成费用提取
+    produced_charges = [
+        record["charge_details"]
+        for record in records
+        if record["charge_details"].get("charge_item") is not None
+    ]
     pairs, missing_expected, extra = _match_charges(exp_charges, produced_charges)
     result.charge_tp = len(pairs)
     result.charge_fp = len(extra)

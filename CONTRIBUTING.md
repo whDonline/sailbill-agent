@@ -16,7 +16,7 @@
 
 见 `docs/harness.md` §2。要求：
 
-- 数据必须**脱敏**或**合成**（`samples/private/` 已在 gitignore 中）；
+- 数据必须**脱敏**或**合成**（真实单据放 `TestSamples/`，已在 gitignore 中）；
 - 用例要覆盖至少一种新情形（新版式、新币种、脏 OCR、负样本）；
 - 提交前跑 `python harness/run_eval.py --min-score 0.95`。
 
