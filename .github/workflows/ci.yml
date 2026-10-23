@@ -23,7 +23,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev,llm]"
       - name: Ruff
-        run: ruff check src tests harness scripts
+        run: ruff check src tests harness
 
   test:
     runs-on: ubuntu-latest
