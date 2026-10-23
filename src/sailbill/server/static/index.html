@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SailBill 账单智能体</title>
+<style>
+:root{--bg:#f5f6f8;--card:#fff;--line:#e3e5ea;--text:#1c1e21;--muted:#6b7280;--brand:#0f8a4e;--brand-soft:#e6f7ee;--warn:#b45309;--warn-soft:#fef3c7;--danger:#b91c1c;--danger-soft:#fee2e2}
+*{box-sizing:border-box;margin:0}
+body{font:14px/1.6 "Segoe UI","Microsoft YaHei",system-ui,sans-serif;background:var(--bg);color:var(--text)}
+header{background:var(--card);border-bottom:1px solid var(--line);padding:12px 24px;display:flex;align-items:center;gap:24px;position:sticky;top:0}
+header h1{font-size:17px;font-weight:600}
+nav{display:flex;gap:4px;flex:1}
+nav button{border:0;background:none;padding:8px 14px;border-radius:8px;cursor:pointer;font-size:14px;color:var(--muted)}
+nav button.active{background:var(--brand-soft);color:var(--brand);font-weight:600}
+main{max-width:960px;margin:24px auto;padding:0 16px}
+section{display:none}
+section.active{display:block}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px;margin-bottom:16px}
+.card h2{font-size:15px;font-weight:600;margin-bottom:12px}
+.drop{border:2px dashed var(--line);border-radius:12px;padding:36px;text-align:center;color:var(--muted);cursor:pointer;transition:border-color .15s}
+.drop.over{border-color:var(--brand);background:var(--brand-soft)}
+.drop b{color:var(--brand)}
+.flist{margin:12px 0;font-size:13px;color:var(--muted)}
+.flist span{display:inline-block;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:2px 8px;margin:2px 4px 2px 0}
+.opts{display:flex;gap:20px;align-items:center;margin:12px 0;font-size:13px}
+.btn{border:0;border-radius:8px;padding:9px 18px;cursor:pointer;font-size:14px;background:var(--brand);color:#fff}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn.ghost{background:var(--bg);color:var(--text);border:1px solid var(--line)}
+.btn.mini{padding:4px 10px;font-size:12px}
+.btn.red{background:var(--danger)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}
+th{color:var(--muted);font-weight:500;white-space:nowrap}
+.badge{display:inline-block;border-radius:999px;padding:1px 10px;font-size:12px}
+.b-committed{background:var(--brand-soft);color:var(--brand)}
+.b-paused,.b-pending_review{background:var(--warn-soft);color:var(--warn)}
+.b-failed,.b-interrupted,.b-rejected{background:var(--danger-soft);color:var(--danger)}
+.b-preview,.b-queued,.b-running{background:#e5e7eb;color:#374151}
+.b-done{background:var(--brand-soft);color:var(--brand)}
+.banner{background:var(--warn-soft);border:1px solid #fcd34d;color:var(--warn);border-radius:12px;padding:12px 16px;margin-bottom:16px;font-size:13px}
+.kv{display:grid;grid-template-columns:130px 1fr;gap:6px 12px;font-size:13px}
+.kv dt{color:var(--muted)}
+.reason{background:var(--bg);border-radius:8px;padding:8px 12px;margin-top:8px;font-size:12px;color:var(--muted);white-space:pre-wrap}
+label.f{display:block;font-size:13px;color:var(--muted);margin:10px 0 4px}
+input[type=text],input[type=password],input[type=number],select{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:14px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 16px}
+.hint{font-size:12px;color:var(--muted);margin-top:4px}
+.muted{color:var(--muted)}
+a{color:var(--brand)}
+/* 输出契约 JSON 展示框：深底等宽，可滚动 */
+.codebox{background:#1e1e24;color:#d6d6de;border-radius:8px;padding:14px 16px;overflow:auto;max-height:520px;font:12px/1.6 Consolas,"Courier New",monospace;white-space:pre}
+</style>
+</head>
+<body>
+<header>
+  <h1>SailBill 账单智能体</h1>
+  <nav>
+    <button data-tab="upload" class="active">上传识别</button>
+    <button data-tab="batches">批次记录</button>
+    <button data-tab="review">待复核 <span id="review-count"></span></button>
+    <button data-tab="ledger">台账导出</button>
+    <button data-tab="contract">输出契约</button>
+    <button data-tab="settings">设置</button>
+  </nav>
+</header>
+<main>
+<div id="banner" class="banner" style="display:none"></div>
+
+<!-- 上传 -->
+<section id="tab-upload" class="active">
+  <div class="card">
+    <h2>上传单据（支持 pdf / 图片 / eml / msg / xlsx / docx / csv）</h2>
+    <div class="drop" id="drop">把文件拖到这里，或 <b>点击选择</b>（可多选）</div>
+    <input type="file" id="file" multiple hidden
+      accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff,.bmp,.webp,.eml,.msg,.xlsx,.xls,.xlsm,.csv,.docx,.doc,.txt,.json">
+    <div class="flist" id="flist"></div>
+    <div class="opts">
+      <label><input type="checkbox" id="opt-commit" checked> 识别后写入账本</label>
+      <label><input type="checkbox" id="opt-hitl"> 写账前人工确认（复核模式）</label>
+      <button class="btn" id="btn-upload" disabled>开始识别</button>
+      <span class="muted" id="upload-status"></span>
+    </div>
+    <p class="hint">识别在后台进行：文字版 PDF 直接解析，图片与扫描件经 OCR 识别，全程调用 DeepSeek 抽取与校验。</p>
+  </div>
+</section>
+
+<!-- 批次 -->
+<section id="tab-batches">
+  <div class="card">
+    <h2>批次列表 <button class="btn ghost mini" style="float:right" onclick="loadBatches()">刷新</button></h2>
+    <table><thead><tr><th>批次</th><th>时间</th><th>状态</th><th>记录</th><th>摘要</th><th></th></tr></thead>
+    <tbody id="batch-rows"></tbody></table>
+  </div>
+  <div class="card" id="batch-detail" style="display:none">
+    <h2>批次详情 <span class="muted" id="bd-id"></span></h2>
+    <table><thead><tr><th>文件</th><th>决策</th><th>状态</th><th>置信度</th><th></th></tr></thead>
+    <tbody id="bd-rows"></tbody></table>
+    <div id="record-detail" style="margin-top:16px"></div>
+  </div>
+</section>
+
+<!-- 复核 -->
+<section id="tab-review">
+  <div class="card">
+    <h2>待复核队列 <button class="btn ghost mini" style="float:right" onclick="loadReview()">刷新</button></h2>
+    <div id="review-list"></div>
+  </div>
+</section>
+
+<!-- 台账 -->
+<section id="tab-ledger">
+  <div class="card">
+    <h2>账本台账</h2>
+    <p class="muted" style="margin-bottom:12px">把当前账本（含自动入账与复核确认后的账单）导出为 Excel，供财务系统或存档使用。</p>
+    <a class="btn" href="/api/export.xlsx" download>下载台账 Excel</a>
+    <table style="margin-top:16px"><thead><tr><th>账单ID</th><th>参考号</th><th>方向</th><th>记账主体</th><th>出票人 → 收票人</th><th>行数</th></tr></thead>
+    <tbody id="ledger-rows"></tbody></table>
+  </div>
+</section>
+
+<!-- 设置 -->
+<section id="tab-settings">
+  <div class="card">
+    <h2>设置向导</h2>
+    <div class="grid2">
+      <div>
+        <label class="f">DeepSeek API Key</label>
+        <input type="password" id="s-llm_api_key" placeholder="sk-...">
+        <label class="f">模型</label>
+        <input type="text" id="s-llm_model">
+        <label class="f">记账主体（判定 AR/AP 的关键）</label>
+        <input type="text" id="s-accounting_entity" placeholder="你的公司全称">
+      </div>
+      <div>
+        <label class="f">OCR 服务地址</label>
+        <input type="text" id="s-ocr_endpoint">
+        <label class="f">文件投递方式</label>
+        <select id="s-file_delivery">
+          <option value="auto">auto（自动选择）</option>
+          <option value="upload">upload（公网中转，题目阶段）</option>
+          <option value="public">public（自有 URL 前缀）</option>
+          <option value="none">none（离线，图片转人工）</option>
+        </select>
+        <label class="f">中转上传端点（正式使用请填公司自建服务）</label>
+        <input type="text" id="s-upload_endpoint" placeholder="https://...">
+        <p class="hint" id="delivery-warning"></p>
+      </div>
+    </div>
+    <div style="margin-top:16px"><button class="btn" onclick="saveSettings()">保存设置</button>
+    <span class="muted" id="settings-status"></span></div>
+    <p class="hint" id="cfg-info"></p>
+  </div>
+</section>
+
+<!-- 输出契约：单独保留 AGENT.md 标准输出 JSON，支持一键复制 -->
+<section id="tab-contract">
+  <div class="card">
+    <h2>标准输出格式（契约） <button class="btn mini" style="float:right" onclick="copyContract()">一键复制</button></h2>
+    <p class="muted" style="margin-bottom:12px">来源：AGENT.md「五、标准输出格式」。每份单据识别后输出一条记录，字段含义见 AGENT.md「六、主要字段说明」；界面「批次记录 → 详情」展示的就是该结构的实际结果。</p>
+    <pre class="codebox" id="contract-json">[
+  {
+    "operation": "UPDATE",
+    "document_info": {
+      "document_type": "Debit Note",
+      "reference_no": "DN-202609-001",
+      "document_date": "2026-09-20"
+    },
+    "transaction_party": {
+      "issuer": "Destination Agent",
+      "recipient": "Origin Agent"
+    },
+    "charge_details": {
+      "charge_item": "Handling Charge",
+      "amount": 40.00,
+      "currency": "USD",
+      "payment_term": "PP"
+    },
+    "financial_attributes": {
+      "accounting_entity": "Origin Agent",
+      "posting_type": "AP"
+    },
+    "audit_trail": {
+      "ai_reasoning": [
+        "通过单据编号和费用名称匹配到已有账单",
+        "根据 OCR 识别结果将金额更新为 USD 40.00",
+        "其他字段未被明确要求修改，因此保留原值"
+      ]
+    }
+  }
+]</pre>
+    <p class="hint" id="copy-status"></p>
+  </div>
+</section>
+</main>
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+let files = [];
+
+// ---- 标签页 ----
+document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
+  document.querySelectorAll("nav button").forEach(x => x.classList.remove("active"));
+  document.querySelectorAll("section").forEach(x => x.classList.remove("active"));
+  b.classList.add("active");
+  $("#tab-" + b.dataset.tab).classList.add("active");
+  ({batches: loadBatches, review: loadReview, ledger: loadLedger, settings: loadSettings}[b.dataset.tab] || (() => {}))();
+});
+
+// ---- 上传 ----
+const drop = $("#drop"), fileInput = $("#file");
+drop.onclick = () => fileInput.click();
+drop.ondragover = e => { e.preventDefault(); drop.classList.add("over"); };
+drop.ondragleave = () => drop.classList.remove("over");
+drop.ondrop = e => { e.preventDefault(); drop.classList.remove("over"); addFiles(e.dataTransfer.files); };
+fileInput.onchange = () => addFiles(fileInput.files);
+function addFiles(list){ files = files.concat([...list]); renderFiles(); }
+function renderFiles(){
+  $("#flist").innerHTML = files.map((f,i) => `<span>${f.name} <a href="javascript:void(0)" onclick="rmFile(${i})">×</a></span>`).join("");
+  $("#btn-upload").disabled = !files.length;
+}
+function rmFile(i){ files.splice(i,1); renderFiles(); }
+$("#btn-upload").onclick = async () => {
+  const fd = new FormData();
+  files.forEach(f => fd.append("files", f));
+  fd.append("hitl", $("#opt-hitl").checked);
+  fd.append("commit", $("#opt-commit").checked);
+  $("#btn-upload").disabled = true;
+  $("#upload-status").textContent = "上传中…";
+  try{
+    const res = await fetch("/api/batches", {method:"POST", body: fd});
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.detail || "上传失败");
+    $("#upload-status").textContent = `批次 ${data.batch_id} 已提交，${data.files} 个文件识别中`;
+    files = []; renderFiles();
+    document.querySelectorAll("nav button")[1].click();
+    pollBatch(data.batch_id);
+  }catch(err){ $("#upload-status").textContent = err.message; $("#btn-upload").disabled = false; }
+};
+
+// ---- 批次 ----
+async function loadBatches(){
+  const rows = await (await fetch("/api/batches")).json();
+  $("#batch-rows").innerHTML = rows.map(b => `<tr>
+    <td>${b.id}</td><td>${(b.created_at||"").replace("T"," ")}</td>
+    <td><span class="badge b-${b.status}">${b.status}</span></td>
+    <td>${b.records_count}</td>
+    <td class="muted">${b.summary.records ?? 0} 条 / 待复核 ${b.summary.needs_review ?? 0}</td>
+    <td><button class="btn ghost mini" onclick="openBatch('${b.id}')">查看</button></td></tr>`).join("")
+    || '<tr><td colspan="6" class="muted">暂无批次</td></tr>';
+}
+let pollTimer = null;
+function pollBatch(id){
+  clearTimeout(pollTimer);
+  pollTimer = setTimeout(async () => {
+    const b = await (await fetch("/api/batches/" + id)).json();
+    if(b.status === "running" || b.status === "queued"){ openBatch(id); pollBatch(id); }
+    else { openBatch(id); loadBatches(); }
+  }, 3000);
+}
+async function openBatch(id){
+  const b = await (await fetch("/api/batches/" + id)).json();
+  $("#batch-detail").style.display = "";
+  $("#bd-id").textContent = b.id + (b.summary.files ? `（${b.summary.files} 个文件）` : "");
+  $("#bd-rows").innerHTML = (b.records||[]).map(r => `<tr>
+    <td>${r.filename || "-"}</td><td>${r.decision || "-"}</td>
+    <td><span class="badge b-${r.status}">${r.status}</span></td>
+    <td>${r.confidence ?? "-"}</td>
+    <td><button class="btn ghost mini" onclick="openRecord(${r.id})">详情</button></td></tr>`).join("")
+    || '<tr><td colspan="5" class="muted">处理中，尚无记录…</td></tr>';
+}
+async function openRecord(id){
+  const r = await (await fetch("/api/records/" + id)).json();
+  const rec = r.record || {}, info = rec.document_info||{}, party = rec.transaction_party||{},
+        charge = rec.charge_details||{}, fin = rec.financial_attributes||{}, extra = rec.extra||{};
+  const reasons = ((rec.audit_trail||{}).ai_reasoning||[]).join("\n");
+  // 标准 output 契约 = record 去掉内部 extra 字段（与 AGENT.md「五、标准输出格式」一致）
+  const std = Object.assign({}, rec); delete std.extra;
+  const esc = s => String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  const stdJson = esc(JSON.stringify(std, null, 2));
+  $("#record-detail").innerHTML = `<div class="card" style="background:var(--bg)">
+    <h2>记录 #${r.id} <span class="badge b-${r.status}">${r.status}</span></h2>
+    <dl class="kv">
+      <dt>单据类型</dt><dd>${info.document_type||"-"}</dd>
+      <dt>参考号 / 日期</dt><dd>${info.reference_no||"-"} / ${info.document_date||"-"}</dd>
+      <dt>出票人 → 收票人</dt><dd>${party.issuer||"-"} → ${party.recipient||"-"}</dd>
+      <dt>费用项</dt><dd>${charge.charge_item||"-"}：${charge.amount??"-"} ${charge.currency||""}（付款条款 ${charge.payment_term||"-"}）</dd>
+      <dt>记账主体 / 方向</dt><dd>${fin.accounting_entity||"-"} / ${fin.posting_type||"-"}</dd>
+      <dt>置信度 / 匹配</dt><dd>${extra.confidence??"-"} ${extra.matched_bill?("→ 账单 "+extra.matched_bill):""}</dd>
+      ${(extra.warnings||[]).length?`<dt>警告</dt><dd>${extra.warnings.join("；")}</dd>`:""}
+    </dl>
+    ${reasons?`<div class="reason">判定理由：\n${reasons}</div>`:""}
+    <h2 style="margin:16px 0 8px">标准输出 JSON（供财务直接使用）<button class="btn mini" style="float:right" onclick="copyRecordJson()">一键复制</button></h2>
+    <pre class="codebox" id="record-json">${stdJson}</pre>
+    <p class="hint" id="record-copy-status"></p>
+    <details style="margin-top:8px"><summary class="muted">处理轨迹</summary>
+      <pre class="reason">${JSON.stringify(r.trace||{}, null, 2)}</pre></details>
+  </div>`;
+}
+
+// 复制当前记录详情中的标准输出 JSON
+async function copyRecordJson(){
+  const text = $("#record-json").textContent;
+  try{ await navigator.clipboard.writeText(text); }
+  catch(e){
+    // 剪贴板 API 不可用时降级：选中文本后 execCommand 复制
+    const range = document.createRange();
+    range.selectNodeContents($("#record-json"));
+    const sel = getSelection(); sel.removeAllRanges(); sel.addRange(range);
+    document.execCommand("copy"); sel.removeAllRanges();
+  }
+  $("#record-copy-status").textContent = "已复制到剪贴板 ✓";
+  setTimeout(() => $("#record-copy-status").textContent = "", 2000);
+}
+
+// ---- 复核 ----
+// 复制指定容器内的文本（供复核页标准 JSON 复用）
+async function copyJson(boxId, tipId){
+  const text = document.getElementById(boxId).textContent;
+  try{ await navigator.clipboard.writeText(text); }
+  catch(e){
+    // 剪贴板 API 不可用时降级：选中文本后 execCommand 复制
+    const range = document.createRange();
+    range.selectNodeContents(document.getElementById(boxId));
+    const sel = getSelection(); sel.removeAllRanges(); sel.addRange(range);
+    document.execCommand("copy"); sel.removeAllRanges();
+  }
+  const tip = document.getElementById(tipId);
+  if(tip){ tip.textContent = "已复制到剪贴板 ✓"; setTimeout(() => tip.textContent = "", 2000); }
+}
+async function loadReview(){
+  const rows = await (await fetch("/api/review")).json();
+  $("#review-count").textContent = rows.length ? `(${rows.length})` : "";
+  $("#review-list").innerHTML = rows.map(r => {
+    const rec = r.record||{}, charge = rec.charge_details||{}, fin = rec.financial_attributes||{},
+          party = rec.transaction_party||{}, extra = rec.extra||{};
+    const reasons = ((rec.audit_trail||{}).ai_reasoning||[]).join("\n");
+    const isPaused = r.status === "paused";
+    // 标准输出 JSON = record 去掉内部 extra（与 AGENT.md「五、标准输出格式」一致）
+    const std = Object.assign({}, rec); delete std.extra;
+    const stdJson = String(JSON.stringify(std, null, 2)).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    const boxId = "review-json-" + r.doc_id, tipId = "review-copy-" + r.doc_id;
+    return `<div class="card" style="background:var(--bg)">
+      <b>${r.filename||r.doc_id}</b>　<span class="badge b-${r.status}">${r.status}</span>　决策 ${r.decision||"-"}　置信度 ${r.confidence??"-"}
+      <dl class="kv" style="margin-top:8px">
+        <dt>费用</dt><dd>${charge.charge_item||"-"}：${charge.amount??"-"} ${charge.currency||""}</dd>
+        <dt>方向</dt><dd>${fin.posting_type||"-"}（主体 ${fin.accounting_entity||"-"}）</dd>
+        <dt>双方</dt><dd>${party.issuer||"-"} → ${party.recipient||"-"}</dd>
+        ${extra.warnings&&extra.warnings.length?`<dt>警告</dt><dd>${extra.warnings.join("；")}</dd>`:""}
+      </dl>
+      ${reasons?`<div class="reason">${reasons}</div>`:""}
+      <div style="margin-top:10px">
+        <button class="btn mini" ${isPaused?"":"disabled title='该记录因信息不足自动转人工（如 AR/AP 无法判定），直接确认无意义；请到「设置」页补全记账主体后重新上传识别'"} onclick="reviewAct('${r.doc_id}','confirm')">确认入账</button>
+        <button class="btn mini red" onclick="reviewAct('${r.doc_id}','reject')">驳回</button>
+        <span class="muted" style="font-size:12px">${isPaused?"写账前人工确认：确认后写入账本（台账导出可见），驳回后不入账留痕":"信息不足自动转人工：不可直接确认，补全设置后重跑批次"}</span>
+      </div>
+      <details style="margin-top:8px"><summary class="muted">标准输出 JSON（一键复制供财务使用）</summary>
+        <pre class="codebox" id="${boxId}">${stdJson}</pre>
+        <button class="btn ghost mini" onclick="copyJson('${boxId}','${tipId}')">一键复制</button>
+        <span class="hint" id="${tipId}"></span>
+      </details>
+    </div>`;
+  }).join("") || '<p class="muted">没有待复核的单据。确认入账：写入账本（台账导出可见）；驳回：不入账仅留痕。</p>';
+}
+async function reviewAct(docId, action){
+  const res = await fetch(`/api/review/${docId}/${action}`, {method:"POST"});
+  if(!res.ok){ alert((await res.json()).detail || "操作失败"); return; }
+  loadReview(); loadLedger();
+}
+
+// ---- 台账 ----
+async function loadLedger(){
+  const res = await fetch("/api/export.xlsx");
+  if(res.ok) $("#ledger-rows").innerHTML = '<tr><td colspan="6" class="muted">台账随批次自动更新，点上方按钮下载 Excel。</td></tr>';
+}
+
+// ---- 设置 ----
+async function loadSettings(){
+  const s = await (await fetch("/api/settings")).json();
+  ["llm_api_key","llm_model","accounting_entity","ocr_endpoint","file_delivery","upload_endpoint"]
+    .forEach(k => { const el = $("#s-"+k); if(el) el.value = s[k] ?? ""; });
+  $("#delivery-warning").textContent = s.delivery_warning || "";
+  $("#cfg-info").textContent = `配置文件：${s.config_file}；数据目录：${s.data_dir}`;
+  const banner = $("#banner");
+  if(!s.llm_enabled){ banner.style.display = ""; banner.textContent = "尚未配置 DeepSeek API Key，当前将以纯规则模式运行（无法智能抽取）。请到「设置」页填入 Key。"; }
+  else banner.style.display = "none";
+}
+async function saveSettings(){
+  const payload = {};
+  ["llm_api_key","llm_model","accounting_entity","ocr_endpoint","file_delivery","upload_endpoint"]
+    .forEach(k => { payload[k] = $("#s-"+k).value; });
+  const res = await fetch("/api/settings", {method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify(payload)});
+  $("#settings-status").textContent = res.ok ? "已保存 ✓" : "保存失败";
+  loadSettings();
+}
+
+// ---- 输出契约一键复制 ----
+async function copyContract(){
+  const text = $("#contract-json").textContent;
+  try{ await navigator.clipboard.writeText(text); }
+  catch(e){
+    // 剪贴板 API 不可用时降级：选中文本后 execCommand 复制
+    const range = document.createRange();
+    range.selectNodeContents($("#contract-json"));
+    const sel = getSelection(); sel.removeAllRanges(); sel.addRange(range);
+    document.execCommand("copy"); sel.removeAllRanges();
+  }
+  $("#copy-status").textContent = "已复制到剪贴板 ✓";
+  setTimeout(() => $("#copy-status").textContent = "", 2000);
+}
+</script>
+</body>
+</html>

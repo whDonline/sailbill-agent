@@ -191,6 +191,27 @@ SAILBILL_UPLOAD_ENDPOINT=            # 任意支持 multipart 上传并返回链
 OCR 响应按文件 `sha256` 缓存，重跑零成本；`SAILBILL_OCR_FOR_PDF=true` 可强制让有文本层的 PDF
 也走一遍 OCR，用于**双通道交叉校验**。
 
+## 桌面单机版（财务一键使用）
+
+不用命令行：双击启动 → 自动打开浏览器 → 拖入单据 → 查看/复核 → 导出台账。数据全部留在本机。
+
+```bash
+# 开发态直接启动
+uv sync
+uv run sailbill-desktop          # 本地服务 http://127.0.0.1:8686，自动开浏览器
+
+# 打包成 exe 分发（命令自行执行）
+uv add --dev pyinstaller
+uv run pyinstaller sailbill.spec
+# 产物 dist/sailbill.exe，双击即用
+```
+
+- **数据目录**：`%APPDATA%\sailbill\`（SQLite 账本、上传文件、config.json；可用 `SAILBILL_DATA_DIR` 覆盖）
+- **设置向导**：首次打开在「设置」页填 DeepSeek Key 与记账主体，写入本机配置文件；环境变量 `SAILBILL_*` 仍优先
+- **复核模式**：上传时勾选"写账前人工确认"，识别结果进入「待复核」队列，逐条确认入账或驳回
+- **台账导出**：「台账导出」页一键下载 Excel（openpyxl）
+- **OCR 投递**：题目阶段 `upload` 走公网中转（文件会经过第三方）；正式使用请在设置页把中转端点换成公司自建服务，或用 `public` 指向自有对象存储
+
 ## 真实样本回归（`TestSamples/`，不随仓库分发）
 
 拿到题面提供的真实单据后，逐份跑通并修掉了 6 个真实版式问题：

@@ -36,3 +36,7 @@ eval/report.md
 # os
 .DS_Store
 Thumbs.db
+
+# ide local docs / uv lock（CI 无 lock 安装，保持历史惯例）
+.trae/
+uv.lock

@@ -28,6 +28,10 @@ dependencies = [
   "beautifulsoup4>=4.12",
   "requests>=2.31",
   "python-dotenv>=1.0",
+  # 桌面单机版：本地 Web 服务
+  "fastapi>=0.110",
+  "uvicorn>=0.29",
+  "python-multipart>=0.0.9",
 ]
 
 [project.optional-dependencies]
@@ -40,6 +44,7 @@ dev = ["pytest>=8", "pytest-cov>=5", "ruff>=0.5", "Pillow>=10"]
 
 [project.scripts]
 sailbill = "sailbill.cli:main"
+sailbill-desktop = "sailbill.server.launcher:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
